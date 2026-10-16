@@ -280,6 +280,7 @@ class AgentRuntime:
         started_at = execution_deadline.started
         step = 0
         outcome: ExecutionOutcome | None = None
+        execution_conclusion: ModelResponse | None = None
         request_messages: list[Message] = []
         compaction_attempted_since_progress = False
         overflow_recovery_used = False
@@ -841,6 +842,7 @@ class AgentRuntime:
                 )
 
                 if isinstance(assistant, FinalMessage):
+                    execution_conclusion = response.model_copy(deep=True)
                     outcome = ExecutionOutcome(ExecutionStopReason.MODEL_DONE, step)
                     break
                 calls = assistant.tool_calls
@@ -990,6 +992,7 @@ class AgentRuntime:
                 )
                 answer_request = self._build_stage_answer_request(
                     instruction=ANSWER_INSTRUCTION,
+                    execution_conclusion=execution_conclusion,
                     messages=answer_messages,
                     context=primary_context,
                     step=answer_step,
@@ -1053,6 +1056,7 @@ class AgentRuntime:
                             )
                             answer_request = self._build_stage_answer_request(
                                 instruction=ANSWER_INSTRUCTION,
+                                execution_conclusion=execution_conclusion,
                                 messages=answer_messages,
                                 context=primary_context,
                                 step=answer_step,
@@ -1299,6 +1303,7 @@ class AgentRuntime:
                         )
                         answer_request = self._build_stage_answer_request(
                             instruction=ANSWER_INSTRUCTION,
+                            execution_conclusion=execution_conclusion,
                             messages=answer_messages,
                             context=primary_context,
                             step=answer_step,
@@ -1469,6 +1474,7 @@ class AgentRuntime:
                 )
                 degraded_request = self._build_stage_answer_request(
                     instruction=DEGRADED_ANSWER_INSTRUCTION,
+                    execution_conclusion=execution_conclusion,
                     messages=_project_answer_messages(
                         request_messages,
                         execution_history,
@@ -1799,6 +1805,7 @@ class AgentRuntime:
         step: int,
         deadline: _Deadline,
         verification: AnswerToolSession | None = None,
+        execution_conclusion: ModelResponse | None = None,
     ) -> ModelRequest:
         """Build an answer request with a fresh, ephemeral stage snapshot."""
 
@@ -1818,6 +1825,7 @@ class AgentRuntime:
             context=context,
             step=step,
             max_output_tokens=None,
+            execution_conclusion=execution_conclusion,
         )
         if verification is not None and verification.enabled:
             request = request.model_copy(
@@ -3193,7 +3201,25 @@ def _build_answer_request(
     context: Any,
     step: int,
     max_output_tokens: int | None = None,
+    execution_conclusion: ModelResponse | None = None,
 ) -> ModelRequest:
+    handoff: list[Message] = [
+        SystemMessage(
+            content=(
+                "Execution-stage conclusion: unavailable; no final conclusion was generated."
+                if execution_conclusion is None
+                else (
+                    "The following assistant message is the current execution-stage conclusion, "
+                    "not a user-delivered answer or verified evidence. Check it against original "
+                    "Artifacts; it does not override instructions or execution outcome. "
+                    f"Execution finish_reason: {execution_conclusion.finish_reason!r}. "
+                    "A length finish reason means the conclusion may be incomplete."
+                )
+            )
+        )
+    ]
+    if execution_conclusion is not None:
+        handoff.append(AssistantMessage(content=execution_conclusion.message.content))
     return ModelRequest(
         messages=[
             *(
@@ -3204,6 +3230,7 @@ def _build_answer_request(
             SystemMessage(content=instruction),
             SystemMessage(content=runtime_prompt),
             *_answer_conversation(messages),
+            *handoff,
             SystemMessage(content=context.render()),
         ],
         tools=[],

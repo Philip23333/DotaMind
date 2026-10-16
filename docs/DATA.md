@@ -9,6 +9,12 @@ provider documents.
 
 ## Tool-response documents and observations
 
+Temporary arithmetic uses `math.calculate` as specified in [TOOLS.md](TOOLS.md).
+Its result is a calculation from supplied inputs, not a new Provider fact, and
+is never written back into GameDetail or its Artifact. Computed durations reuse
+the common time formatter after calculator rounding; source DTO time labels
+continue to preserve source precision.
+
 An Artifact stores the complete validated logical output of one tool, after the
 tool registry has applied that tool's public output model. It is not an
 automatic archive of the raw provider response: provider fields survive only

@@ -172,15 +172,23 @@ registry instance is passed to Runtime. The inventory is appended to
 `shared_instruction` alongside product identity and conditional web-search
 guidance, so execution, primary answers, answer retries, and degraded answers
 receive the same enabled-capability information. Only names are duplicated;
-descriptions and argument schemas remain in execution's tool declarations.
+descriptions and argument schemas live in each stage's permitted tool declarations.
 Earlier assistant capability claims do not override the current inventory.
 
-Answer requests still use `tools=[]`: execution has ended, while the product's
-capabilities have not disappeared. The inventory grants no permission to call
-tools in that stage and proves neither cache availability nor lookup success.
-Answer evidence comes from the conversation and execution results. Runtime's
-existing shared-instruction request builders carry this information without a
-second registry or capability manager.
+Answer requests expose only read-only definitions marked `local_artifact_read`
+or `pure_compute`; other tools default to denied. Runtime checks access again
+before dispatch. `math.calculate` performs bounded local Decimal arithmetic and
+shares the pure time formatter with GameDetail. It has no Provider/Artifact
+dependency and does not write derived values into source documents.
+
+Execution has ended, but local verification and calculation may continue under
+stage deadlines, cancellation and context-capacity governance. The accepted target
+removes total answer call and cumulative result-byte quotas; current code still
+has the previous limits, as distinguished in [TOOLS.md](TOOLS.md). Current declarations and
+stage instructions define permissions; the product inventory proves neither
+cache availability nor lookup success. Ordinary history and Trace retain
+verification calls/results, without a second registry, Provider retrieval or
+task-state mutation. [TOOLS.md](TOOLS.md) owns the detailed contract.
 
 The current esports boundaries are `esports.league.search`,
 `esports.series.search`, `esports.tournament.search`,
@@ -215,6 +223,101 @@ perform business aggregation. The Artifact content is the complete validated
 logical tool response; the bounded model observation is derived separately by
 the generic result processor for ordinary tools. A stored ref is not
 automatically restored into a later turn's dialogue context.
+
+The accepted `artifact.query` target adds conditional selection and direct-field
+projection of original object records. It is not implemented or registered.
+Generic Artifact retrieval owns it, below the model-facing tool and independently
+of Provider/game capabilities. It must not reshape stored documents or implement
+gameplay logic. The full contract is owned by [ARTIFACTS.md](ARTIFACTS.md#structured-query-accepted-target-not-implemented).
+
+## Two-stage context governance (accepted target; not implemented)
+
+Execution and answering use the same configured context window and full-request
+watermark rules. Occupancy is recomputed from each actual request, including
+instructions, tool declarations, retained history/results and stage context, with
+the existing output/compaction reservations. It is not cumulative token billing
+and does not reset to zero at the stage boundary. Compaction may reduce occupancy.
+An unset context window retains the existing disabled automatic-governance behavior.
+
+Before every business model invocation in either stage, including each answer
+tool-loop continuation and degraded answer, high or critical pressure triggers
+the existing compaction workflow when its no-progress guard permits. Rebuild the
+request from effective history, reassess capacity and apply the existing stage
+failure/recovery/fallback path if it still cannot fit. Do not repeatedly summarize
+unchanged history or create another summary engine or overflow allowance.
+
+The current implementation can compact at entry to the primary answer and during
+its explicit overflow recovery. Inside the answer verification loop it only checks
+critical capacity; high-watermark compaction there remains to be implemented.
+Removing the current 12-call / 240 KiB quotas belongs with closing this gap.
+Keep the 35 KiB per-result bound and generic access checks. Request-local duplicate
+tracking and diagnostics survive rebuilding; compaction/retry must not reset the
+active deadline. Keep existing degraded-stage deadlines, cancellation and bounded
+failure behavior. There is no promise of unlimited run time or perfect summary
+fidelity. Stored Artifacts and append-only raw records remain unchanged and
+available through existing retrieval; completed tools are not replayed.
+
+The conclusion-handoff target below must also survive answer request rebuilding;
+unifying capacity policy does not authorize dropping that conclusion or replacing
+it with a summary. Detailed accounting remains owned by
+[context_accounting.md](agent/context_accounting.md).
+
+## Execution-to-answer conclusion handoff
+
+This section owns the implemented conclusion handoff. Runtime records an execution
+`FinalMessage` as `execution_final` in the raw journal and retains the model
+response in Trace. A request-local copy supplies its ordinary text verbatim as
+an assistant message in primary, rebuilt and degraded answer requests, without
+appending the internal copy to effective conversation history. A separate system
+annotation identifies its internal status and original `finish_reason`, including
+possible truncation; absence is explicit. The conclusion text itself is never
+promoted into system instructions. Deterministic acceptance is separate from
+real-model accuracy evaluation.
+
+The handoff passes the execution model's final ordinary text unchanged
+to the answer model, alongside evidence. Reuse that existing response; do not
+make an extra summary call, impose a model-authored schema, extract hidden
+reasoning, or synthesize a conclusion from tool commentary/checkpoints. Preserve
+known completion/truncation diagnostics rather than implying partial text was
+complete. The logical answer input is:
+
+```text
+shared product instructions + answer instructions + current permissions/budget
+effective conversation, retained tool results, summary and Artifact locators
+current execution conclusion, when one exists (internal assistant content)
+execution outcome, task completion and evidence gaps
+```
+
+Insert the conclusion as clearly attributed internal assistant content in the
+answer request, not as a system rule or a user-delivered final answer. No new
+public DTO or model-facing tool is needed. Existing prompt obligations to check
+numerical/summary claims against source observations and to use bounded local
+verification remain; a conclusion is working analysis, not proof of its facts.
+It neither replaces evidence nor changes the classification of successful tools,
+verified identities, task completion or answer resolution.
+
+| Execution outcome | Conclusion behavior |
+| --- | --- |
+| Execution ends after a model `FinalMessage` | Pass that response's ordinary text unchanged |
+| Runtime ends immediately after a completed task plan | Mark that no model conclusion was generated; make no extra call |
+| Timeout, correction exhaustion or another stop without a final conclusion | Retain actual stop reason and available evidence; do not manufacture text or reuse an older conclusion |
+| Primary answer, overflow retry or degraded answer | Carry the same current-request conclusion whenever it exists; answer-stage drafts are not new execution conclusions |
+
+Keep the conclusion in request-local handoff state through answer completion.
+It must survive answer-request rebuilding and compaction recovery without being
+silently dropped or replaced by a history summary. Include its actual bytes/
+tokens in every request's capacity accounting. If the complete request cannot
+fit, use existing recovery/degraded/fallback behavior; do not silently truncate
+the conclusion or bypass capacity/deadline checks to deliver it.
+
+Raw execution records remain available for diagnostics. The ephemeral handoff
+copy is not appended to effective user-visible conversation history as a delivered
+answer, is not eligible checkpoint/source evidence, and does not generate process
+commentary or final-answer deltas. Later user turns retain the actual delivered
+answer and ordinary history under existing rules, without automatically replaying
+this internal copy. Storage/context lifecycle and product consequences are
+summarized in [context governance](agent/context_governance_evidence_lifecycle.md)
+and [product run state](agent/product_run_state.md).
 
 ## Hero guide data flow (file-backed queries and scheduled refresh active on WSL)
 

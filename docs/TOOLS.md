@@ -42,6 +42,7 @@ The clean-slate default registry currently exposes:
 ```text
 artifact.grep
 artifact.read
+math.calculate
 esports.league.search
 esports.series.search
 esports.series.teams
@@ -56,6 +57,112 @@ player.recent_games        # when a STRATZ token is configured
 game.detail                # when OpenDota is explicitly enabled
 esports.game.resolve       # when game resolution and its required providers are enabled
 ```
+
+## Local calculation and answer verification
+
+`math.calculate` is registered without Provider configuration. Input contains
+`expression`, optional `variables` (default `{}`), and optional `result_unit`
+(`"seconds"` or `null`, default `null`). Variables are strict finite numbers or
+nonempty numeric lists. Null, booleans, strings, objects/Artifact references,
+nested lists and partially missing lists are rejected, never coerced or skipped.
+
+The AST allowlist admits decimal literals, variables, `+ - * /`, parentheses,
+unary signs, numeric lists, and `sum/mean/min/max` with one nonempty numeric list.
+Powers, modulo, floor division, comparisons, boolean/conditional expressions,
+strings, attributes, indexing, comprehensions, arbitrary calls and argument
+expansion are rejected. No `eval`, network, file or Artifact access is used.
+
+Internal Decimal arithmetic uses 28 significant digits. Final results have at
+most four fractional digits with half-up rounding; trailing zeros are removed,
+negative zero becomes zero, and integer results are JSON integers. Success
+returns `expression`, `variables`, numeric `result`, `result_unit`, `label`,
+`equation`, and boolean `rounded`. The program substitutes variables and retains
+parentheses; `equation` uses `≈` if arithmetic or output rounding discarded
+nonzero digits, otherwise `=`. This is bounded decimal arithmetic, not
+arbitrary-precision exact mathematics.
+
+For `result_unit="seconds"`, `label` formats the final rounded result with the
+same signed `MM:SS[.fraction]` function as GameDetail; otherwise it is `null`.
+For example `a-b`, with `a=1478`, `b=1010`, returns `468`, `"07:48"` and
+`"(1478 - 1010) = 468"`. Unit declaration controls display; it does not validate
+dimensions. The tool cannot verify source selection, entity, timestamp, or the
+model's subsequent copying. Results do not modify GameDetail.
+
+Bounds: expression 1024 characters, 32 variables, 256 numeric variable values
+total, 1–100 values per list, 256 AST nodes, depth 32, substituted expression
+8192 characters, and numeric/intermediate magnitudes at most `10^15` with
+nonzero magnitudes at least `1e-100`. Unknown variables, division by zero,
+unsupported syntax and bounds violations use `invalid_arguments`, with no
+partial/null success. Normal registry validation details identify variable paths.
+If a rounded fractional result cannot survive JSON-number serialization without
+changing its decimal value, return an error rather than a contradictory equation.
+
+Definitions carry a generic `access` property: `external_data` (default),
+`local_artifact_read` or `pure_compute`. Answers declare only read-only tools in
+the latter two categories; Runtime checks access again before dispatch. Catalog,
+guide, Provider and task-state tools remain unavailable during answers.
+
+Accepted target (not implemented): answer verification has no total tool-call
+ceiling and no cumulative result-byte admission limit. The current implementation
+still enforces the previous 12-call / 240 KiB limits; removing them and completing
+answer-loop watermark compaction require a coordinated Runtime change.
+
+Each result remains capped at 35 KiB. Oversized content is replaced with a bounded
+error and never enters history/model context. Identical name/argument calls remain
+rejected; their request-local record survives compaction, retries and degraded
+attempts. Calls, errors and returned bytes remain observable metrics, not a
+cumulative admission quota. Stage deadlines, cancellation, access checks and
+existing protocol/failure handling remain in force; compaction or retry must not
+restart an attempt's deadline. The existing degraded-stage deadline is unchanged.
+Before every execution or answer model request, including requests after answer
+tool results, use the same configured full-request high-watermark compaction
+policy. The existing no-progress guard and capacity/recovery/fallback paths apply.
+See [ARCHITECTURE.md](ARCHITECTURE.md#two-stage-context-governance-accepted-target-not-implemented)
+for the unified target and current implementation gap.
+
+Answer prompts require original-Artifact checks for numerical and summary claims,
+exact entity/time/metric/unit matching, and calculator use for arithmetic. Prompt
+instructions do not guarantee compliance or correct input selection. Ordinary
+history and Trace retain verification calls/results, without Provider retrieval
+or task-checkpoint mutation. Artifact-bound calculator variables, result
+writeback and automated factual verification remain outside the calculator's
+first version. Structured Artifact query is the separate accepted target below.
+
+## Structured Artifact query (accepted target; not registered)
+
+`artifact.query(ref, expression, fields, offset=0, limit=20)` selects object
+records by exact field conditions and returns requested direct members with
+their original record paths. [ARTIFACTS.md](ARTIFACTS.md#structured-query-accepted-target-not-implemented)
+owns its complete input/output, JSONPath subset, missing-value, continuation,
+error and resource-limit contract. This section does not add it to the current
+registry or make it available to a model before implementation.
+
+Use `grep` to discover scalar-value locations, `read` for known exact paths,
+`query` for conditional record selection and multi-field retrieval, and
+`math.calculate` for temporary arithmetic from verified inputs. Query reads one
+stored Artifact, remains generic, and does not fetch Provider data, infer Dota
+semantics, regenerate time labels or alter the stored document. The planned
+access property is `local_artifact_read`; normal execution and bounded answer
+verification may use it once registered. Answers follow the same stage permissions,
+per-result bounds, deadlines and context governance; query adds no call or
+cumulative byte quota.
+
+For Larl's `20:00`, `25:00`, `30:00` samples, an illustrative target expression is:
+
+```text
+$.data.players[?@.identity.account_id == 106305042].minute_timeline[?@.time_seconds == 1200 || @.time_seconds == 1500 || @.time_seconds == 1800]
+```
+
+Request `time_seconds`, `time_label`, `net_worth`, `experience`, `last_hits` and
+`deaths` in `fields`. These are fields of the selected record; the query engine
+does not identify or add them automatically. The account predicate uses the
+player's actual `identity.account_id` path, not a top-level player member.
+Use conditions on source timestamps,
+not consecutive list positions or inferred minutes. Exact timestamp absence
+produces no matching row, without interpolation. A query result verifies the
+selection the model requested, not whether that selection answers the user or
+whether the model faithfully copies it. The full single-time request/result
+example and missing/null distinctions are in the owner contract.
 
 ## Esports search capabilities
 

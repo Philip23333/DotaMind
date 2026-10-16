@@ -4,7 +4,7 @@
 
 This document is the sole detailed data contract for `game.detail`.
 
-- **Current implementation:** `game.detail` returns the governed eight-section DTO with bilingual entity/unit objects, normalized event types, scalar coverage evidence, and one Catalog/unit-mapping version per result.
+- **Current implementation:** `game.detail` returns the governed eight-section DTO with bilingual entity/unit objects, program-generated game-time labels, normalized event types, scalar coverage evidence, and one Catalog/unit-mapping version per result.
 - **Accepted target:** `data` is an explicit eight-section DotaMind DTO containing source facts, necessary deterministic transformations, and locally resolved English/Chinese entity names.
 - **Implementation status:** local unit lookup, entity enrichment, event conversion, the public Service switch, and generic tool/Artifact reads are implemented and verified with deterministic tests. Live provider availability and real-model behavior remain separate acceptance work.
 - **Use:** minute-by-minute state review and final-game statistics.
@@ -53,6 +53,39 @@ The internal/public type split is implemented: the OpenDota adapter returns `Ope
 | Semantics not verified | Mark them pending; do not assign a business meaning |
 
 Counts, ordering, and field mappings are data transformations, not performance judgments. Each still needs a reproducible rule.
+
+### Game-relative time labels
+
+The capability DTO constructs display labels from validated seconds before public
+tool output and Artifact storage. Labels use signed `MM:SS[.fraction]`: minutes
+have at least two digits and accumulate beyond 59; seconds have two digits.
+Preserve negative pre-game values and significant fractional seconds without
+rounding or truncation. Remove insignificant trailing fractional zeros; numeric
+negative zero displays as `00:00`. These are game-relative values or durations,
+not calendar timestamps, and have no timezone conversion.
+
+| Seconds field | Derived label field | Examples |
+|---|---|---|
+| `time_seconds` | `time_label` | `600` → `"10:00"`; `1010` → `"16:50"`; `-89` → `"-01:29"`; `1478.25` → `"24:38.25"` |
+| `duration_seconds` | `duration_label` | `2904` → `"48:24"`; `3600` → `"60:00"` |
+| `reported_time_seconds` | `reported_time_label` | `0` → `"00:00"` |
+| `time_dead_seconds` | `time_dead_label` | `28.125` → `"00:28.125"` |
+| Economy `time_seconds[]` | `time_labels[]` | Preserve the verified axis's order and length; `[0, 600]` → `["00:00", "10:00"]` |
+
+Each label is a string or `null`; a missing seconds value produces `null`, not
+`00:00`. An unavailable team axis yields `time_labels=null`, even when advantage
+values remain available; an explicit empty axis yields `[]`. Minute-node time is
+a required integer, so an existing minute node always has a non-null label.
+Do not introduce a `minute` field or infer timestamps from array positions.
+
+The original seconds remain unchanged and authoritative for matching, sorting,
+and calculations. Labels are deterministic display values, not new source facts,
+minute buckets, or proof that an event belongs to a player. The same formatter
+serves all explicitly typed time fields, including purchases, neutral history,
+deaths, buybacks, objectives, and first blood. Do not format arbitrary numbers,
+calendar timestamps, or scalar evidence in `coverage`. Generic Artifact tools do
+not add labels. A supplied non-null label inconsistent with its validated seconds
+is invalid; DTO construction generates omitted labels from those seconds.
 
 ## Entity names, units, and exact mapping
 
@@ -105,6 +138,7 @@ Every section below states its responsibility, target fields and types, source, 
 |---|---|---|
 | `match_date` | `YYYY-MM-DD` string or `null` | Convert source `start_time` from Unix seconds using `Asia/Shanghai`. If unavailable or invalid, emit `null`. |
 | `duration_seconds` | integer or `null` | Source `duration`, representing formal game duration. Do not add `pre_game_duration` or expose a second pre-game duration. |
+| `duration_label` | string or `null` | Program-formatted `duration_seconds` under the game-relative time-label rules above. |
 | `game_winner` | `"radiant"`, `"dire"`, or `null` | Strict mapping: `radiant_win=true` gives `radiant`; `false` gives `dire`; absent or unknown gives `null`. |
 | `score` | object or `null` | Preserve source `radiant_score` and `dire_score` under those side keys. |
 | `competition` | `null` | Deliberately unpopulated in this version. A future PandaScore-context decision may define it separately; do not copy an OpenDota League body, mix ID namespaces, or report this scope exclusion as a per-game source gap. |
@@ -152,11 +186,12 @@ These are final values, not values copied from the last minute sample. Assists a
 
 This version contains exactly the ten final-stat fields above. Wallet/spend/rate fields, `stuns`, ward/resource counts, unit-category kill counts, `buyback_count`, `actions_per_min`, `pings`, `life_state_dead`, and `leaver_status` are excluded, not unresolved first-version decisions. A later concrete consumer may justify an extension. A source wallet value must never be replaced by cumulative `gold_t`.
 
-`minute_timeline` is a list of records with these eight fields:
+`minute_timeline` is a list of records with these nine fields:
 
 | Field | Type | Source and rule |
 |---|---|---|
-| `time_seconds` | integer or `null` | Source `times` entry, in game seconds |
+| `time_seconds` | integer | Source `times` entry, in game seconds; invalid axes make the timeline unavailable rather than creating nodes with unknown time. |
+| `time_label` | string | Program-formatted `time_seconds`; for example `1200` → `"20:00"`. |
 | `net_worth` | number or `null` | Same-index `networth_t` value |
 | `earned_gold` | number or `null` | Same-index `gold_t` value; this is cumulative gold, not wallet balance |
 | `experience` | number or `null` | Same-index `xp_t` value |
@@ -178,6 +213,7 @@ The source `radiant_gold_adv` remains named as the source's gold-advantage fact;
 | `radiant_gold_adv` | nullable-number array or `null` | Preserve source samples; an invalid or unknown individual value remains `null` with a coverage gap. |
 | `radiant_xp_adv` | nullable-number array or `null` | Preserve source samples with the same missing-value rule. |
 | `time_seconds` | integer array or `null` | Reuse a player's `times` axis only after verifying all player axes agree and both team arrays have matching lengths and index correspondence. |
+| `time_labels` | string array or `null` | Format the verified `time_seconds` array in the same order; unavailable axis stays `null`, explicit empty axis stays `[]`. |
 
 Do not assume every player array shares the same axis or that an advantage array can be aligned merely because lengths match. When correspondence cannot be established, leave the affected axis or series unavailable and report only a material promised-data gap or conflict.
 
@@ -194,9 +230,9 @@ Each player build is associated by `player_slot` and contains:
 | Subsection | Target fields and source |
 |---|---|
 | `final_loadout` | `inventory` has six slots from `item_0` through `item_5`; `backpack` has three slots from `backpack_0` through `backpack_2`. Each position contains an item entity or `null`; preserve positions and apply the explicit zero/unknown slot rules above. `item_neutral` and `item_neutral2` likewise contain nullable item entities without assigning unverified meanings to the two source slots. Retain `aghanims_scepter`, `aghanims_shard`, and `moonshard` as nullable numeric final-state source values, without interpreting them as equipment timing or converting them to booleans. |
-| `purchase_events` | Ordered `purchase_log` records with `time_seconds` (number or `null`), `item` (entity object or `null`) from exact conversion of source `key`, and optional `charges` (number or `null`). |
+| `purchase_events` | Ordered `purchase_log` records with `time_seconds` (number or `null`), derived `time_label` (string or `null`), `item` (entity object or `null`) from exact conversion of source `key`, and optional `charges` (number or `null`). |
 | `ability_upgrade_sequence` | Ability entity objects from `ability_upgrades_arr`, in exact source upgrade order with repeats and talent entries retained. Unknown source IDs remain present with null names. |
-| `neutral_item_history` | Source records with `time_seconds` from `time`, `item` from exact conversion of `item_neutral`, and `enhancement` from exact conversion of `item_neutral_enhancement`; each entity is nullable. Retain source order and partial records. The action represented by a record remains unverified. |
+| `neutral_item_history` | Source records with `time_seconds` from `time`, derived `time_label`, `item` from exact conversion of `item_neutral`, and `enhancement` from exact conversion of `item_neutral_enhancement`; each entity is nullable. Retain source order and partial records. The action represented by a record remains unverified. |
 
 Keep component purchases, intermediate items, and completed purchases as separate source records. Do not infer a missing completed item, create purchase parent/child links, sum purchase prices as total spend, reconstruct minute inventories, or claim that a purchase means delivery or usability. Ability sequence order carries no inferred time or hero level. Do not call neutral-item history “item switching” until that meaning is verified. Permanent buffs are excluded from the first version. The exact meaning and final names of the two neutral slots remain pending; do not describe them as two confirmed equipped items.
 
@@ -221,12 +257,14 @@ For every event category, preserve an explicit empty source list as `[]` and rep
 | Target field | Type | Source and rule |
 |---|---|---|
 | `time_seconds` | number or `null` | `deaths_log[].time` |
+| `time_label` | string or `null` | Program-formatted `time_seconds` |
 | `victim_player_slot` | integer or `null` | The owning player's `player_slot` |
 | `killer_player_slot` | integer or `null` | Fill only when source evidence explicitly identifies the corresponding player; otherwise `null` |
 | `killer_unit` | unit object or `null` | Exact conversion of `deaths_log[].key`; distinguishes heroes, towers, creeps, and other verified units |
 | `gold_lost` | number or `null` | `deaths_log[].gold_lost` |
 | `gold_fed` | number or `null` | `deaths_log[].gold_fed` |
 | `time_dead_seconds` | number or `null` | `deaths_log[].time_dead` |
+| `time_dead_label` | string or `null` | Program-formatted `time_dead_seconds` |
 
 Do not infer a killer player from similar names or nearby event times. Missing optional death fields remain `null` and do not require individual coverage warnings. Other event-row fields stay source-specific; their exact names and types must be verified before they are added.
 
@@ -254,7 +292,11 @@ Additional target event fields are:
 | Objectives | `time_seconds` from `time`; normalized `type` from the table above; `target_unit` from `key` only when it is an exact mapped unit identifier; `actor_unit` from exact unit conversion of `unit`. Do not copy `source_type`, `source_key`, or `source_unit_key` into business fields. |
 | Other source codes | Present unverified `slot`, `team`, `killer`, `value`, or non-unit `key` values remain scalar evidence in coverage with exact source paths. They do not become business identities or inferred rewards. Missing optional values require no warning. |
 | Objective players | `player_slot` and `victim_player_slot` are populated only from explicit same-name source fields matching one unique player slot in this record. A bare `slot`, `team`, or `killer` never supplies a player identity. |
-| First blood | Nullable `reported_time_seconds` from top-level `first_blood_time` and nullable `objective_events` containing the first-blood objective rows. Conflicts point to exact source `objectives[i].time`; neither view overwrites the other. |
+| First blood | Nullable `reported_time_seconds` from top-level `first_blood_time`, its derived `reported_time_label`, and nullable `objective_events` containing the first-blood objective rows. Conflicts point to exact source `objectives[i].time`; neither view overwrites the other. |
+
+Buyback and objective records likewise include `time_label` derived only from
+their own `time_seconds`. Conflicting first-blood views retain their own labels;
+formatting does not resolve their disagreement.
 
 The Service supplies one pinned local entity resolver and unit resource to the projector. A killer player slot additionally requires one unique source player with that hero ID and slot. Unknown catalog keys, repeated hero IDs, or repeated slots leave the player unknown. A recognized summon type does not identify its controller. No fuzzy matching is used. Missing one player's event log adds a coverage gap while preserving other players' known events; all unavailable logs yield `null`, and explicitly empty logs yield `[]`. Each category retains source player/log order without claiming a global time order.
 
@@ -306,6 +348,7 @@ The source start time converts to the Beijing calendar date shown. The formal du
     match = {
       "match_date": "2026-10-12",
       "duration_seconds": 2904,
+      "duration_label": "48:24",
       "game_winner": "dire",
       "score": {"radiant": 17, "dire": 33}
     }
@@ -318,6 +361,7 @@ For the player with account ID `321580662`, the source player slot is 1 and the 
 
     {
       "time_seconds": 600,
+      "time_label": "10:00",
       "net_worth": 3440,
       "earned_gold": 2930,
       "experience": 2383,
@@ -329,7 +373,7 @@ For the player with account ID `321580662`, the source player slot is 1 and the 
 
 The same saved player's final values include K/D/A 3/6/4, level 25, 605 last hits, 3 denies, and net worth 26,064. Source hero damage is 14,456, tower damage 686, and hero healing 0. These demonstrate all ten approved `final_stats` fields; additional statistics are outside this version.
 
-The source purchase log includes component keys `faerie_fire` and `slippers` at -89 seconds, `power_treads` at 388 seconds, and `manta` at 1,478 seconds. Convert each key into its own bilingual item entity while preserving those separate records; do not assert a recipe relationship. The last becomes `{"time_seconds":1478,"item":{"id":147,"name_zh":"幻影斧","name_en":"Manta Style"},"charges":null}`.
+The source purchase log includes component keys `faerie_fire` and `slippers` at -89 seconds, `power_treads` at 388 seconds, and `manta` at 1,478 seconds. Convert each key into its own bilingual item entity while preserving those separate records; do not assert a recipe relationship. The last becomes `{"time_seconds":1478,"time_label":"24:38","item":{"id":147,"name_zh":"幻影斧","name_en":"Manta Style"},"charges":null}`.
 
 A saved death record for this player is at 815 seconds and carries source `npc_dota_hero_pangolier`, which supplies the bilingual hero `killer_unit`. The interaction map records one kill against `npc_dota_hero_monkey_king`; its target becomes `{"id":114,"name_zh":"齐天大圣","name_en":"Monkey King"}`. Source keys are conversion inputs, not duplicated public fields.
 

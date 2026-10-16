@@ -15,6 +15,45 @@ architecture confirmation
 Do not expand a capability into a provider-routing framework or universal DTO
 before a second concrete implementation demonstrates the need.
 
+## Data accuracy: conclusion handoff and structured query
+
+Local time labels, `math.calculate`, and bounded answer-stage Artifact verification
+are implemented with deterministic checks; real-model accuracy remains separate
+acceptance. Execution-conclusion handoff is implemented and deterministically
+tested. Unified two-stage context governance and `artifact.query` remain
+unimplemented accepted targets. Their contracts live in
+[ARCHITECTURE.md](ARCHITECTURE.md#execution-to-answer-conclusion-handoff)
+and [ARTIFACTS.md](ARTIFACTS.md#structured-query-accepted-target-not-implemented).
+
+Implementation units remain separate commit boundaries:
+
+1. **Execution-conclusion handoff (implemented; live acceptance pending).** Pass the existing execution final ordinary
+   text to primary/rebuilt/degraded answer requests with clear internal assistant
+   attribution and real capacity accounting. Preserve evidence, raw Trace and
+   user-delivery boundaries. Test absence and recovery without generating an
+   extra conclusion or adding query in this commit.
+2. **Unified two-stage context governance.** Remove answer total-call and cumulative
+   result-byte quotas together with adding high-watermark compaction before each
+   answer tool-loop continuation, including degraded answering. Reuse execution's
+   capacity rules and existing compaction/recovery/no-progress behavior. Keep
+   per-result bounds, duplicate rejection, stage deadlines and cancellation.
+   Preserve conclusion handoff during rebuilding. This accepted target is not
+   implemented; see [ARCHITECTURE.md](ARCHITECTURE.md#two-stage-context-governance-accepted-target-not-implemented).
+3. **Structured Artifact query.** Implement the accepted JSONPath subset, direct
+   field projection, original read-compatible paths, missing semantics, bounded
+   continuation and resource checks; validate/pin `python-jsonpath` and register
+   the tool as `local_artifact_read` under the unified context-governance policy,
+   without total-call or cumulative byte quotas.
+   Protect same-game selection and generic retrieval boundaries with focused tests.
+
+Use [EVALS.md](EVALS.md#structured-query-acceptance-planned-implementation-and-checks-pending)
+for deterministic and separately controlled real-model acceptance. Preserve the
+existing replay framework and frozen samples; do not claim a measured accuracy
+gain from tool plumbing alone. These units add no Provider/replay integration,
+GameDetail schema change, frontend feature, derived Artifact store, or
+Artifact-bound calculator variables. Documented targets do not change the live
+registry or prompts until their implementation units are explicitly started.
+
 ## Commit 1: clean-slate tool layer
 
 - Establish an artifact-only default model-facing registry baseline.
@@ -372,7 +411,8 @@ through 5.
 
 Product guidance recognizes cached hero guides when enabled. Composition now
 derives a short tool-name inventory from the actual Runtime registry and shares
-it with execution and all answer attempts; answer tool calls remain disabled.
+it with execution and all answer attempts. Answers now permit bounded local
+Artifact verification and pure calculation, as defined in [TOOLS.md](TOOLS.md).
 Deterministic regressions cover retained incorrect capability claims and an
 offline guide lookup. Real-model acceptance in both new conversations and
 conversations with old refusal history remains pending; scripted-model success

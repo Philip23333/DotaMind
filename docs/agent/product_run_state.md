@@ -168,7 +168,12 @@ Frontend connection outcomes carry their request ID and affect only that request
 messages and local busy state; they do not rewrite the server Run State.
 
 `tooling` is derived from active tool calls rather than a competing top-level
-stage. Tools may alternate with model requests throughout execution. An ordered
+stage. Tools may alternate with model requests throughout execution and permitted
+local answer verification. Verification keeps stage `answer` and does not restart
+execution timing. Answer text continues to stream live. When a turn requests
+verification tools, Runtime starts a replacement answer attempt using the existing
+attempt-ID contract, clearing provisional text before verification. Tool commentary
+is not retained in the final answer. An ordered
 activity list records those occurrences, with stable item identity and tool call
 IDs for matching starts and terminal updates. The projection must have explicit
 size/count bounds and disclose omitted activity rather than growing without
@@ -323,6 +328,16 @@ Empty content creates no activity. A no-tool
 execution conclusion is not process commentary. A response-level rejected batch
 creates no accepted-call commentary activity; its explicit not-executed call
 results remain governed by the rejected-batch contract.
+
+The execution-conclusion handoff is implemented with deterministic checks; live
+accuracy acceptance remains pending. Its owner is
+[ARCHITECTURE.md](../ARCHITECTURE.md#execution-to-answer-conclusion-handoff).
+It will pass an existing execution conclusion internally to the answer model,
+without publishing it as commentary, answer text or an already-delivered user
+message. It adds no frontend event or display surface and does not restart
+execution timing. Only the actual answer attempts continue through the existing
+live-streaming and canonical-delivery path. Raw Trace retention and model-visible
+handoff remain distinct facts.
 
 Use only the response's ordinary `content`. Do not reuse final-answer delta events,
 publish both stream fragments and the completed text, infer language or intent,

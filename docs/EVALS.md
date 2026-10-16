@@ -13,6 +13,7 @@ accepted esports capabilities, and request-scoped task planning when a
 ```text
 artifact.grep
 artifact.read
+math.calculate
 esports.league.search
 esports.series.search
 esports.series.teams
@@ -30,6 +31,136 @@ esports.game.resolve      # when game resolution and required providers are enab
 The Context Governance evaluation adds only its local `fixture.edition.lookup`
 fixture tool to that evaluation's registry. It does not register live esports
 providers, and it does not change the product registry.
+
+## Local arithmetic and answer verification
+
+Deterministic acceptance covers decimal arithmetic/aggregates, four-place half-up
+rounding, generated equations/time labels, strict missing/type rejection, denied
+AST syntax and resource bounds. Runtime coverage includes Artifact-read-to-
+calculation continuation, history and Trace, property-based permissions, denied
+external dispatch, duplicate accounting, cumulative UTF-8 byte admission, shared
+primary/degraded budgets, cancellation and separation of tool commentary from
+final text. These checks do not establish real-model compliance or answer accuracy.
+
+Real-model acceptance must separately score wrong input selection, incorrect
+copying of results, original-field checks, calls/bytes, tokens and latency. Keep
+the existing replay framework; changed tools/DTO inputs require a new recorded
+variant rather than overwriting frozen experiment inputs.
+
+## Structured query acceptance (planned; implementation and checks pending)
+
+`artifact.query` is an accepted target, not part of the current tool surface.
+Its owner is [ARTIFACTS.md](ARTIFACTS.md#structured-query-accepted-target-not-implemented).
+The following are implementation acceptance requirements, not tests reported as
+already passing. Use saved source-backed/local fixtures, with provenance, and no
+live Provider calls for deterministic checks.
+
+The same-game selection regression uses Valve game `9040460429`, account
+`106305042` (Larl). Filter on `players[].identity.account_id` and the exact
+`minute_timeline[].time_seconds`, not adjacent
+array positions. Verify these source-backed rows and their original read paths:
+
+| `time_seconds` | `time_label` | `net_worth` | `earned_gold` | `experience` | `last_hits` | `deaths` |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1200 | `20:00` | 8657 | 8767 | 9842 | 135 | 2 |
+| 1500 | `25:00` | 10730 | 10840 | 12686 | 173 | 2 |
+| 1800 | `30:00` | 13885 | 14105 | 17363 | 242 | 2 |
+
+Also verify:
+
+- Exact account/time conjunction across nested arrays; OR selects requested
+  times without substituting the 1260/1320-second records. A 1230-second exact
+  query has no matching sample. Member-name matching is distinct from grep's
+  substring matching, and typed equality does not coerce strings/booleans.
+- Projection preserves each requested existing value, including null, zero,
+  false and empty containers. Missing members are omitted and listed separately;
+  all-missing fields retain a matched empty object. No implicit account/time/
+  localization fields are added and the stored Artifact is unchanged.
+- Every original path round-trips through real `artifact.read` to the source
+  record. Invalid/unrepresentable locations, non-object matches and unsupported
+  syntax fail explicitly, without silently dropping inconvenient results.
+- Filter-before-pagination, original array order, no duplicated/skipped records,
+  correct actual counts and legal `next_offset`. Byte truncation preserves whole
+  projected records; first-record/envelope overflow and offset-cap continuation
+  fail rather than returning a misleading empty/complete page. An empty final
+  page is a valid non-truncated success when the query genuinely has no later row.
+- Accepted expression, path, comparison/nesting, field, pagination and document
+  node limits are enforced before an unbounded query proceeds. Validate the
+  selected library's AST allowlist, lazy iteration and compatibility against the
+  actual pinned version. Strict RFC mode alone is insufficient evidence.
+- Unknown/cross-session refs, storage failures, timeout/cancellation, current
+  registry status and no-Provider behavior retain their proper boundaries. Once
+  registered, query uses `local_artifact_read` and the same per-result bounds,
+  deadlines and context governance across primary, recovery and degraded attempts,
+  without a new total-call or cumulative-result-byte quota.
+
+Real-model acceptance must inspect whether conditions actually select the user's
+intended account/time/metric, whether returned values are copied correctly, and
+whether numerical and summary claims are checked. Report input-selection errors
+separately from copying errors; a correct query execution is not answer accuracy.
+
+## Unified two-stage context acceptance (planned; implementation pending)
+
+The target is owned by [ARCHITECTURE.md](ARCHITECTURE.md#two-stage-context-governance-accepted-target-not-implemented).
+These cases are requirements, not completed test results:
+
+- More than 12 permitted answer calls and more than 240 KiB cumulative results
+  remain possible within deadlines/capacity; the 35 KiB per-result limit still
+  applies. No replacement hidden cumulative quota is introduced.
+- Every actual model request uses full-request accounting. A stage transition
+  retains the carried history's occupancy rather than resetting it or summing
+  historical billed tokens. With no configured window, preserve disabled governance.
+- Successive answer tool results cross the high watermark before critical
+  capacity; primary and degraded loops compact, rebuild and reassess before the
+  next model call, through the same policy used by execution.
+- No-progress guards prevent repeated summaries of unchanged history. Failed or
+  unavailable compaction and still-critical requests use the existing stage
+  recovery/fallback behavior. Preserve the existing single overflow allowance.
+- Compaction/retry retains duplicate-call records, diagnostics and active
+  deadlines, does not replay completed tools and remains cancellable. Preserve
+  existing degraded-stage time limits and the approved conclusion-handoff target.
+- Effective-history evidence eligibility is rebuilt, while complete stored
+  Artifacts remain rereadable and raw records stay intact. Provider tools remain
+  forbidden in answering. Repeat a narrow read with different parameters after
+  compaction to verify recovery without bypassing identical-call rejection.
+
+## Execution-conclusion handoff acceptance
+
+The owner is [ARCHITECTURE.md](ARCHITECTURE.md#execution-to-answer-conclusion-handoff).
+`test_execution_conclusion_handoff.py` covers verbatim text and finish reasons,
+request-local history boundaries, absent conclusions, watermark/overflow rebuilding,
+degraded answering and capacity refusal without silent omission. Related Runtime
+and session-history checks protect existing evidence and delivery behavior.
+These deterministic checks do not establish a real-model accuracy improvement;
+the controlled comparison below remains pending.
+Current raw `execution_final` recording is not evidence that the answer model
+received it. Request-level checks must prove:
+
+- The current execution final ordinary text reaches the actual answer request
+  unchanged, with evidence/outcome/task state retained; hidden reasoning is not
+  read. The model is not required to produce another schema or summary call.
+- The conclusion is attributed internal assistant content, not a system rule or
+  an already-delivered user answer. Tool commentary, older execution conclusions
+  and answer-stage drafts cannot substitute for it.
+- Primary, overflow-rebuilt and degraded requests retain the same conclusion.
+  Its real size participates in capacity/output accounting; insufficient capacity
+  uses existing recovery/fallback instead of dropping/truncating the text.
+- Plan-complete, timeout and other stops without a generated conclusion explicitly
+  retain that absence, stop reason and reliable evidence. No extra model call or
+  fabricated conclusion is introduced. Existing task/identity/evidence status is
+  unchanged by the presence of a conclusion.
+- Raw Trace retains execution output, while the ephemeral handoff does not create
+  duplicate delivered history, process commentary or user-facing text events.
+  The actual final answer retains live streaming and canonical persistence.
+
+Keep all frozen replay inputs/results intact. Create separately recorded variants
+on the same governed DTO, prompt/budget/model settings and questions: the accepted
+local-verification baseline, baseline plus conclusion handoff, and that variant
+plus query. Record any unavoidable differences. Score numerical correctness,
+recheck behavior, query selection, copying, scope expansion, calls/bytes, tokens
+and latency separately; do not attribute a combined change to one mechanism or
+present deterministic checks as real-model improvements. Documented requirements
+do not imply that planned code tests or real-model experiments have been run.
 
 ## Match Artifact continuation
 
@@ -240,7 +371,8 @@ conditional on the registered search capability.
 
 Request-level regressions cover normal answers, answer overflow recovery/retry,
 and degraded answers: all retain the inventory exactly once, while answer
-requests keep `tools=[]` and exclude execution-only instructions. Input message
+requests expose only permitted local verification/computation tools and exclude
+execution-only instructions. Empty registries still declare no tools. Input message
 lists are unchanged. A scripted Runtime regression retains earlier assistant
 claims such as "no hero guides" and "only web search", verifies the current
 `hero.guide` schema and inventory, executes an offline handler, and confirms its
