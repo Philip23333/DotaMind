@@ -242,7 +242,7 @@ class ArtifactQuerier:
         observation_max_bytes: int = DEFAULT_ARTIFACT_LIMITS.observation_max_bytes,
     ):
         self._store = store
-        self._max_bytes = min(35 * 1024, observation_max_bytes)
+        self._max_bytes = observation_max_bytes
 
     async def query(self, args: ArtifactQueryInput) -> ArtifactQueryResult:
         document = await self._store.get(args.ref)

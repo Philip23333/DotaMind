@@ -800,7 +800,8 @@ def build_vnext_registry(
                 inline_max_bytes=artifact_limits.inline_max_bytes,
             ),
             observation_max_bytes=artifact_limits.observation_max_bytes,
-        )
+        ),
+        observation_max_bytes=artifact_limits.observation_max_bytes,
     )
     register_artifact_tools(
         registry,

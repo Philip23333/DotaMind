@@ -64,8 +64,7 @@ def test_from_env_reads_file_and_process_environment_takes_precedence(
     _isolate_configuration(monkeypatch, tmp_path)
     env_path = tmp_path / ".env"
     env_path.write_text(
-        "DOTAMIND_TOOL_INLINE_MAX_BYTES=7000\n"
-        "DOTAMIND_TOOL_OBSERVATION_MAX_BYTES=9000\n",
+        "DOTAMIND_TOOL_INLINE_MAX_BYTES=7000\nDOTAMIND_TOOL_OBSERVATION_MAX_BYTES=9000\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(composition, "_VNEXT_ENV_PATH", env_path)
@@ -196,18 +195,10 @@ def test_composition_injects_environment_limits_into_externalization_and_reads(
     assert serialized_size(read.content) <= limits.observation_max_bytes
 
 
-def test_composition_fails_instead_of_returning_an_oversized_preview() -> None:
+def test_composition_rejects_a_budget_that_cannot_even_report_an_error() -> None:
     limits = ArtifactLimits(inline_max_bytes=1, observation_max_bytes=16)
-    registry = _match_registry(VNextSettings(artifact_limits=limits))
-
-    result = _execute(
-        registry,
-        ToolCall(id="match", name="esports.match.search", arguments={}),
-    )
-
-    assert result.status == "error"
-    assert result.error is not None
-    assert result.error.code == "artifact_error"
+    with pytest.raises(ValueError, match="minimal structured error"):
+        _match_registry(VNextSettings(artifact_limits=limits))
 
 
 def test_two_registry_instances_keep_independent_observation_budgets() -> None:

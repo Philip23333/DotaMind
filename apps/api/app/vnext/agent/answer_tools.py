@@ -43,8 +43,13 @@ class AnswerToolSession:
             "Only the declared local read-only and pure-computation tools are permitted. "
             "No new external data, task planning, or checkpoint writes. "
             "There is no total call or cumulative result-byte quota. "
-            "Stage deadlines, context capacity and the 35 KiB per-result bound still apply. "
-            "Identical calls are rejected; reuse prior results or choose a different narrow read. "
+            "Stage deadlines, context capacity and the shared per-result bound "
+            f"({self.registry.observation_max_bytes} UTF-8 bytes) still apply. "
+            "Duplicate detection covers only calls already attempted during this request's "
+            "answer stage, including retries and degraded attempts. Calls made during execution "
+            "or earlier user turns do not count as answer-stage duplicates: you may repeat those "
+            "exact calls to perform the required answer-stage verification. For a call already "
+            "attempted in this answer stage, reuse its result or choose a different narrow read. "
             "When tools are unavailable, answer from verified evidence and state remaining gaps."
         )
 
@@ -62,9 +67,7 @@ class AnswerToolSession:
 
     @staticmethod
     def size(result: ToolResultMessage) -> int:
-        # Meter the actual business/error JSON admitted to the model, not call IDs.
-        value = result.content if result.status == "ok" else result.error.model_dump(mode="json")
-        return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        return ToolRegistry.result_size(result)
 
     async def execute(self, call: ToolCall, *, timeout: float | None) -> ToolResultMessage:
         self.calls += 1
@@ -83,9 +86,7 @@ class AnswerToolSession:
             self.seen.add(key)
             result = await self.registry.execute(call, timeout=timeout)
 
-        size = self.size(result)
-        if size > 35 * 1024:
-            result = self.error(call, "answer result byte limit exceeded; read a narrower path")
-            size = self.size(result)
-        self.returned_bytes += size
+        # Include local permission/duplicate errors in the same admission invariant.
+        result = self.registry.bound_result(result)
+        self.returned_bytes += self.size(result)
         return result

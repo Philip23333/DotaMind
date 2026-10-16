@@ -10,7 +10,8 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.vnext.artifacts import ToolResponseArtifactError
+from app.vnext.artifacts import ToolResponseArtifactError, serialized_size
+from app.vnext.artifacts.limits import DEFAULT_ARTIFACT_LIMITS
 from app.vnext.artifacts.processor import ToolResultProcessor
 from app.vnext.artifacts.retrieval import (
     ArtifactPathNotFoundError,
@@ -23,9 +24,39 @@ from app.vnext.tools.errors import StructuredToolError, ToolError, ToolErrorCode
 
 
 class ToolRegistry:
-    def __init__(self, *, result_processor: ToolResultProcessor | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        result_processor: ToolResultProcessor | None = None,
+        observation_max_bytes: int = DEFAULT_ARTIFACT_LIMITS.observation_max_bytes,
+    ) -> None:
         self._tools: dict[str, ToolDefinition] = {}
         self._result_processor = result_processor
+        minimum = self.result_size(self._oversized_result("budget"))
+        if type(observation_max_bytes) is not int or observation_max_bytes < minimum:
+            raise ValueError(
+                f"observation_max_bytes must fit the minimal structured error ({minimum} bytes)"
+            )
+        self.observation_max_bytes = observation_max_bytes
+
+    @staticmethod
+    def result_size(result: ToolResultMessage) -> int:
+        value = result.content if result.status == "ok" else result.error.model_dump(mode="json")
+        return serialized_size(value)
+
+    @staticmethod
+    def _oversized_result(call_id: str) -> ToolResultMessage:
+        return ToolResultMessage(
+            tool_call_id=call_id,
+            status="error",
+            error=ToolError(code="invalid_tool_output", message="tool result byte limit exceeded"),
+        )
+
+    def bound_result(self, result: ToolResultMessage) -> ToolResultMessage:
+        """Final invariant after tool-owned paging/spill, before history admission."""
+        if self.result_size(result) <= self.observation_max_bytes:
+            return result
+        return self._oversized_result(result.tool_call_id)
 
     def register(self, tool: ToolDefinition) -> None:
         if tool.name in self._tools:
@@ -45,6 +76,14 @@ class ToolRegistry:
         return [tool.schema() for tool in self._tools.values()]
 
     async def execute(
+        self,
+        call: ToolCall,
+        *,
+        timeout: float | None = None,
+    ) -> ToolResultMessage:
+        return self.bound_result(await self._execute(call, timeout=timeout))
+
+    async def _execute(
         self,
         call: ToolCall,
         *,
