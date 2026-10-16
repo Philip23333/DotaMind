@@ -202,7 +202,7 @@ class AgentTraceCollector:
         self,
         *,
         step: int,
-        stage: Literal["execution", "primary_answer"],
+        stage: Literal["execution", "primary_answer", "degraded_answer"],
         status: str,
         error_code: str | None,
     ) -> None:

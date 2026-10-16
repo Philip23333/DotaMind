@@ -102,10 +102,11 @@ Definitions carry a generic `access` property: `external_data` (default),
 the latter two categories; Runtime checks access again before dispatch. Catalog,
 guide, Provider and task-state tools remain unavailable during answers.
 
-Accepted target (not implemented): answer verification has no total tool-call
-ceiling and no cumulative result-byte admission limit. The current implementation
-still enforces the previous 12-call / 240 KiB limits; removing them and completing
-answer-loop watermark compaction require a coordinated Runtime change.
+Answer verification has no total tool-call ceiling and no cumulative result-byte
+admission limit. Primary entry, degraded entry and answer tool-loop continuations
+use one full-request watermark preflight, with the same capacity rules and atomic
+compaction workflow as execution. Deterministic tests cover this behavior; live
+model quality remains a separate acceptance step.
 
 Each result remains capped at 35 KiB. Oversized content is replaced with a bounded
 error and never enters history/model context. Identical name/argument calls remain
@@ -117,8 +118,9 @@ restart an attempt's deadline. The existing degraded-stage deadline is unchanged
 Before every execution or answer model request, including requests after answer
 tool results, use the same configured full-request high-watermark compaction
 policy. The existing no-progress guard and capacity/recovery/fallback paths apply.
-See [ARCHITECTURE.md](ARCHITECTURE.md#two-stage-context-governance-accepted-target-not-implemented)
-for the unified target and current implementation gap.
+See [ARCHITECTURE.md](ARCHITECTURE.md#two-stage-context-governance)
+for the unified contract. An expired deadline stops preflight before another
+capacity or compaction attempt, preserving its deadline failure reason.
 
 Answer prompts require original-Artifact checks for numerical and summary claims,
 exact entity/time/metric/unit matching, and calculator use for arithmetic. Prompt

@@ -196,7 +196,7 @@ longer part of model context. Maintenance summary usage is recorded on
 `compaction_calls`; business step numbers and business model usage remain
 separate. Byte metrics are not token counts.
 
-### Two-stage watermark target (not implemented)
+### Two-stage watermark governance
 
 Execution and answering share the configured window and the same full-request
 capacity policy; entering answering does not grant a fresh empty context window.
@@ -204,14 +204,16 @@ Recompute occupancy for the actual request, rather than adding billed usage from
 earlier calls. Before every answer continuation after tools, high-watermark
 pressure must use the existing atomic compaction/rebuild/reassessment workflow,
 subject to its no-progress guard. Apply this rule to degraded answering as well.
-Current answer-loop checks only reject critical capacity; entry-to-primary
-watermark compaction does not yet cover these continuations.
+Primary entry, degraded entry and tool-loop continuations share one preflight.
+Successful tool progress permits another compaction attempt; failed/duplicate
+calls do not reset the no-progress guard. Each request is still capacity-checked.
 
-The accepted target removes answer total-call and cumulative-result-byte quotas.
+The implementation removes answer total-call and cumulative-result-byte quotas.
 Keep per-result bounds, current stage deadlines, cancellation and existing failure
 paths; rebuilding cannot reset duplicate-call tracking or the active deadline.
-These are target changes, not claims that the current checks already implement
-them. [ARCHITECTURE.md](../ARCHITECTURE.md#two-stage-context-governance-accepted-target-not-implemented)
+An expired deadline stops preflight before attempting capacity/compaction again.
+Deterministic checks cover the behavior; live model quality is separate.
+[ARCHITECTURE.md](../ARCHITECTURE.md#two-stage-context-governance)
 owns the unified behavior. Artifact contents and raw execution records remain
 unchanged; effective-history observations and source eligibility are rebuilt as
 usual after successful compaction.

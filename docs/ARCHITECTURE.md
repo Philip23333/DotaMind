@@ -183,8 +183,8 @@ dependency and does not write derived values into source documents.
 
 Execution has ended, but local verification and calculation may continue under
 stage deadlines, cancellation and context-capacity governance. The accepted target
-removes total answer call and cumulative result-byte quotas; current code still
-has the previous limits, as distinguished in [TOOLS.md](TOOLS.md). Current declarations and
+removes total answer call and cumulative result-byte quotas, as implemented and
+specified in [TOOLS.md](TOOLS.md). Current declarations and
 stage instructions define permissions; the product inventory proves neither
 cache availability nor lookup success. Ordinary history and Trace retain
 verification calls/results, without a second registry, Provider retrieval or
@@ -230,7 +230,7 @@ Generic Artifact retrieval owns it, below the model-facing tool and independentl
 of Provider/game capabilities. It must not reshape stored documents or implement
 gameplay logic. The full contract is owned by [ARTIFACTS.md](ARTIFACTS.md#structured-query-accepted-target-not-implemented).
 
-## Two-stage context governance (accepted target; not implemented)
+## Two-stage context governance
 
 Execution and answering use the same configured context window and full-request
 watermark rules. Occupancy is recomputed from each actual request, including
@@ -246,10 +246,14 @@ request from effective history, reassess capacity and apply the existing stage
 failure/recovery/fallback path if it still cannot fit. Do not repeatedly summarize
 unchanged history or create another summary engine or overflow allowance.
 
-The current implementation can compact at entry to the primary answer and during
-its explicit overflow recovery. Inside the answer verification loop it only checks
-critical capacity; high-watermark compaction there remains to be implemented.
-Removing the current 12-call / 240 KiB quotas belongs with closing this gap.
+Primary/degraded entry and tool-loop continuations use one answer preflight;
+execution uses the same full-request capacity rules and atomic compaction workflow.
+Completed successful tools permit another compaction attempt; failed/duplicate
+calls do not reset the no-progress guard, though their context is still measured.
+Answer call/byte totals are diagnostic metrics, not cumulative admission quotas.
+An expired deadline stops preflight before another capacity/compaction attempt.
+This behavior is implemented with deterministic checks; live quality acceptance
+remains separate.
 Keep the 35 KiB per-result bound and generic access checks. Request-local duplicate
 tracking and diagnostics survive rebuilding; compaction/retry must not reset the
 active deadline. Keep existing degraded-stage deadlines, cancellation and bounded

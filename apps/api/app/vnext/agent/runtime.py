@@ -964,6 +964,111 @@ class AgentRuntime:
 
             answer_context_builder = AnswerContextBuilder()
             verification = AnswerToolSession(self.tools)
+
+            async def prepare_answer_continuation(
+                request: ModelRequest,
+                *,
+                purpose: Literal["primary_answer", "degraded_answer"],
+                deadline: _Deadline,
+                progress: bool,
+            ) -> tuple[ModelRequest, OutputBudget]:
+                nonlocal request_start, compaction_attempted_since_progress
+                self._check_controls(token, deadline)
+                if progress:
+                    compaction_attempted_since_progress = False
+                request, budget = self._apply_output_budget(request)
+                capacity = assess_request_capacity(request, self.limits, output_budget=budget)
+                if (
+                    capacity is not None
+                    and capacity.pressure.value in {"high", "critical"}
+                    and not compaction_attempted_since_progress
+                ):
+                    compaction_attempted_since_progress = True
+                    if trace_collector is not None:
+                        trace_collector.context_capacity_check(
+                            step=request.step,
+                            stage=purpose,
+                            phase="before_compaction",
+                            capacity=capacity,
+                        )
+                    compacted = await self._compact_session_history(
+                        execution_history=execution_history,
+                        request_id=request_id,
+                        token=token,
+                        deadline=deadline,
+                        step=request.step,
+                        recent_history_tokens=self.limits.compaction_keep_recent_tokens,
+                        trace_collector=trace_collector,
+                        trigger="watermark",
+                        stage=purpose,
+                    )
+                    if compacted:
+                        request_start, rebuilt = self._rebuild_after_compaction(
+                            execution_history=execution_history,
+                            request_id=request_id,
+                            request_start=request_start,
+                            request_start_before=request_start,
+                            step=request.step,
+                            trigger="watermark",
+                            trace_collector=trace_collector,
+                        )
+                        # Preserve the list shared with the active verification loop and
+                        # outer overflow/delivery paths; do not resurrect compacted raw rows.
+                        request_messages[:] = rebuilt
+                        degraded = purpose == "degraded_answer"
+                        context = answer_context_builder.build(
+                            execution_messages=request_messages,
+                            outcome=outcome,
+                            task_state_coordinator=self.task_state_coordinator,
+                            resolution=resolution,
+                            projection_mode=(
+                                AnswerProjectionMode.DEGRADED
+                                if degraded
+                                else AnswerProjectionMode.PRIMARY
+                            ),
+                            effective_history_embedded=True,
+                        )
+                        request = self._build_stage_answer_request(
+                            instruction=(
+                                DEGRADED_ANSWER_INSTRUCTION if degraded else ANSWER_INSTRUCTION
+                            ),
+                            execution_conclusion=execution_conclusion,
+                            messages=_project_answer_messages(
+                                request_messages,
+                                execution_history,
+                                self.system_instruction,
+                            ),
+                            context=context,
+                            step=request.step,
+                            deadline=deadline,
+                            verification=verification,
+                        )
+                        request, budget = self._apply_output_budget(request)
+                        capacity = assess_request_capacity(
+                            request,
+                            self.limits,
+                            output_budget=budget,
+                        )
+                        if trace_collector is not None:
+                            trace_collector.answer_projection(
+                                request,
+                                context,
+                                kind="degraded" if degraded else "primary",
+                                resolution=resolution,
+                            )
+                self._check_controls(token, deadline)
+                if capacity is not None:
+                    if trace_collector is not None:
+                        trace_collector.context_capacity_check(
+                            step=request.step,
+                            stage=purpose,
+                            phase="before_model",
+                            capacity=capacity,
+                        )
+                    if capacity.pressure.value == "critical":
+                        raise ContextCapacityExceeded("answer verification exceeds context budget")
+                return request, budget
+
             answer_deadline = _Deadline(self.limits.answer_timeout_seconds)
             primary_started = monotonic()
             primary_attempt_id = next_answer_attempt_id()
@@ -1000,90 +1105,20 @@ class AgentRuntime:
                     verification=verification,
                 )
                 answer_request, answer_output_budget = self._apply_output_budget(answer_request)
-                if auto_compaction_enabled:
-                    primary_capacity = assess_request_capacity(
-                        answer_request,
-                        self.limits,
-                        output_budget=answer_output_budget,
-                    )
-                    assert primary_capacity is not None
-                    if (
-                        primary_capacity.pressure.value in {"high", "critical"}
-                        and not compaction_attempted_since_progress
-                    ):
-                        compaction_attempted_since_progress = True
-                        if trace_collector is not None:
-                            trace_collector.context_capacity_check(
-                                step=answer_step,
-                                stage="primary_answer",
-                                phase="before_compaction",
-                                capacity=primary_capacity,
-                            )
-                        request_start_before = request_start
-                        compacted = await self._compact_session_history(
-                            execution_history=execution_history,
-                            request_id=request_id,
-                            token=token,
-                            deadline=answer_deadline,
-                            step=answer_step,
-                            recent_history_tokens=(self.limits.compaction_keep_recent_tokens),
-                            trace_collector=trace_collector,
-                            trigger="watermark",
-                            stage="primary_answer",
-                        )
-                        if compacted:
-                            request_start, request_messages = self._rebuild_after_compaction(
-                                execution_history=execution_history,
-                                request_id=request_id,
-                                request_start=request_start,
-                                request_start_before=request_start_before,
-                                step=answer_step,
-                                trigger="watermark",
-                                trace_collector=trace_collector,
-                            )
-                            primary_context = answer_context_builder.build(
-                                execution_messages=request_messages,
-                                outcome=outcome,
-                                task_state_coordinator=self.task_state_coordinator,
-                                resolution=resolution,
-                                projection_mode=AnswerProjectionMode.PRIMARY,
-                                effective_history_embedded=True,
-                            )
-                            answer_messages = _project_answer_messages(
-                                request_messages,
-                                execution_history,
-                                self.system_instruction,
-                            )
-                            answer_request = self._build_stage_answer_request(
-                                instruction=ANSWER_INSTRUCTION,
-                                execution_conclusion=execution_conclusion,
-                                messages=answer_messages,
-                                context=primary_context,
-                                step=answer_step,
-                                deadline=answer_deadline,
-                                verification=verification,
-                            )
-                            answer_request, answer_output_budget = self._apply_output_budget(
-                                answer_request
-                            )
-                    self._check_controls(token, answer_deadline)
-                    final_capacity = assess_request_capacity(
-                        answer_request,
-                        self.limits,
-                        output_budget=answer_output_budget,
-                    )
-                    assert final_capacity is not None
-                    if trace_collector is not None:
-                        trace_collector.context_capacity_check(
-                            step=answer_step,
-                            stage="primary_answer",
-                            phase="before_model",
-                            capacity=final_capacity,
-                        )
-                    if final_capacity.pressure.value == "critical":
-                        raise ContextCapacityExceeded(
-                            "answer request exceeds the configured context budget"
-                        )
+                answer_request, answer_output_budget = await prepare_answer_continuation(
+                    answer_request,
+                    purpose="primary_answer",
+                    deadline=answer_deadline,
+                    progress=False,
+                )
+                primary_context = answer_context_builder.build(
+                    execution_messages=request_messages,
+                    outcome=outcome,
+                    task_state_coordinator=self.task_state_coordinator,
+                    resolution=resolution,
+                    projection_mode=AnswerProjectionMode.PRIMARY,
+                    effective_history_embedded=True,
+                )
                 self._check_controls(token, answer_deadline)
                 recovery_pending = False
                 while True:
@@ -1125,6 +1160,14 @@ class AgentRuntime:
                                 execution_history=execution_history,
                                 request_id=request_id,
                                 next_attempt_id=next_answer_attempt_id,
+                                prepare_continuation=lambda request, progress: (
+                                    prepare_answer_continuation(
+                                        request,
+                                        purpose="primary_answer",
+                                        deadline=answer_deadline,
+                                        progress=progress,
+                                    )
+                                ),
                             )
                         ) as invocation_stream:
                             async for invocation_item in invocation_stream:
@@ -1489,24 +1532,27 @@ class AgentRuntime:
                     degraded_request
                 )
                 degraded_precheck_error: AgentRuntimeError | None = None
-                if auto_compaction_enabled:
-                    degraded_capacity = assess_request_capacity(
+                try:
+                    degraded_request, degraded_output_budget = await prepare_answer_continuation(
                         degraded_request,
-                        self.limits,
-                        output_budget=degraded_output_budget,
+                        purpose="degraded_answer",
+                        deadline=answer_deadline,
+                        progress=False,
                     )
-                    assert degraded_capacity is not None
-                    if trace_collector is not None:
-                        trace_collector.context_capacity_check(
-                            step=degraded_step,
-                            stage="degraded_answer",
-                            phase="before_model",
-                            capacity=degraded_capacity,
-                        )
-                    if degraded_capacity.pressure.value == "critical":
-                        degraded_precheck_error = ContextCapacityExceeded(
-                            "degraded answer request exceeds the configured context budget"
-                        )
+                except (
+                    AgentDeadlineExceeded,
+                    ContextCapacityExceeded,
+                    CompactionFailedError,
+                ) as exc:
+                    degraded_precheck_error = exc
+                degraded_context = answer_context_builder.build(
+                    execution_messages=request_messages,
+                    outcome=outcome,
+                    task_state_coordinator=self.task_state_coordinator,
+                    resolution=resolution,
+                    projection_mode=AnswerProjectionMode.DEGRADED,
+                    effective_history_embedded=True,
+                )
                 if degraded_precheck_error is None:
                     try:
                         self._check_controls(token, answer_deadline)
@@ -1552,6 +1598,14 @@ class AgentRuntime:
                             execution_history=execution_history,
                             request_id=request_id,
                             next_attempt_id=next_answer_attempt_id,
+                            prepare_continuation=lambda request, progress: (
+                                prepare_answer_continuation(
+                                    request,
+                                    purpose="degraded_answer",
+                                    deadline=answer_deadline,
+                                    progress=progress,
+                                )
+                            ),
                         )
                     ) as invocation_stream:
                         async for invocation_item in invocation_stream:
@@ -1857,9 +1911,13 @@ class AgentRuntime:
         execution_history: Any | None,
         request_id: Any | None,
         next_attempt_id: Callable[[], str],
+        prepare_continuation: Callable[
+            [ModelRequest, bool], Awaitable[tuple[ModelRequest, OutputBudget]]
+        ],
     ) -> AsyncIterator[AgentEvent | _ModelInvocationResult]:
         """Local verification loop with provisional-text replacement and live answers."""
 
+        tool_progress = False
         while True:
             self._check_controls(token, deadline)
             capacity = assess_request_capacity(request, self.limits, output_budget=output_budget)
@@ -1898,14 +1956,8 @@ class AgentRuntime:
                 step=step, has_tool_calls=True, duration=invocation.duration_seconds
             )
             calls = message.tool_calls
-            if (
-                not request.tools
-                or not calls
-                or len(calls) > verification.max_calls - verification.calls
-            ):
-                raise ModelProtocolError(
-                    "answer verification call budget or tool protocol exceeded"
-                )
+            if not request.tools or not calls:
+                raise ModelProtocolError("answer verification tool protocol violated")
             request_messages.append(message)
             if execution_history is not None and request_id is not None:
                 execution_history.record(request_id, message, kind="assistant_tool_call")
@@ -1927,6 +1979,7 @@ class AgentRuntime:
                     token,
                     deadline,
                 )
+                tool_progress = tool_progress or result.status == "ok"
                 duration = max(0.0, monotonic() - started)
                 results.append(result)
                 request_messages.append(result)
@@ -1979,7 +2032,8 @@ class AgentRuntime:
                     "tools": verification.schemas(),
                 }
             )
-            request, output_budget = self._apply_output_budget(request)
+            request, output_budget = await prepare_continuation(request, tool_progress)
+            tool_progress = False
             if trace_collector is not None:
                 trace_collector.model_request(request, output_budget=output_budget)
             yield ModelRequested(
@@ -2492,7 +2546,7 @@ class AgentRuntime:
         recent_history_tokens: int,
         trace_collector: AgentTraceCollector | None,
         trigger: Literal["explicit", "watermark", "overflow"] = "explicit",
-        stage: Literal["execution", "primary_answer"] = "execution",
+        stage: Literal["execution", "primary_answer", "degraded_answer"] = "execution",
     ) -> bool:
         """Generate and atomically commit one session-history compaction."""
 

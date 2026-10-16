@@ -20,8 +20,8 @@ before a second concrete implementation demonstrates the need.
 Local time labels, `math.calculate`, and bounded answer-stage Artifact verification
 are implemented with deterministic checks; real-model accuracy remains separate
 acceptance. Execution-conclusion handoff is implemented and deterministically
-tested. Unified two-stage context governance and `artifact.query` remain
-unimplemented accepted targets. Their contracts live in
+tested. Unified two-stage context governance is also implemented with deterministic
+checks; `artifact.query` remains an unimplemented accepted target. Their contracts live in
 [ARCHITECTURE.md](ARCHITECTURE.md#execution-to-answer-conclusion-handoff)
 and [ARTIFACTS.md](ARTIFACTS.md#structured-query-accepted-target-not-implemented).
 
@@ -32,13 +32,13 @@ Implementation units remain separate commit boundaries:
    attribution and real capacity accounting. Preserve evidence, raw Trace and
    user-delivery boundaries. Test absence and recovery without generating an
    extra conclusion or adding query in this commit.
-2. **Unified two-stage context governance.** Remove answer total-call and cumulative
+2. **Unified two-stage context governance (implemented; live acceptance pending).** Remove answer total-call and cumulative
    result-byte quotas together with adding high-watermark compaction before each
    answer tool-loop continuation, including degraded answering. Reuse execution's
    capacity rules and existing compaction/recovery/no-progress behavior. Keep
    per-result bounds, duplicate rejection, stage deadlines and cancellation.
-   Preserve conclusion handoff during rebuilding. This accepted target is not
-   implemented; see [ARCHITECTURE.md](ARCHITECTURE.md#two-stage-context-governance-accepted-target-not-implemented).
+   Preserve conclusion handoff during rebuilding; see
+   [ARCHITECTURE.md](ARCHITECTURE.md#two-stage-context-governance).
 3. **Structured Artifact query.** Implement the accepted JSONPath subset, direct
    field projection, original read-compatible paths, missing semantics, bounded
    continuation and resource checks; validate/pin `python-jsonpath` and register

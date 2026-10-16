@@ -61,9 +61,8 @@ session-local existence boundary as document reads.
 
 These per-operation bounds and externalization control individual tool outputs;
 there is no cumulative Raw admission budget across effective history. The accepted
-answer-stage target likewise has no total call or cumulative result-byte quota;
-current code still has the previous limits pending the unified Runtime change.
-[TOOLS.md](TOOLS.md) owns the permissions, per-result bounds and migration status. Overall
+answer-stage policy likewise has no total call or cumulative result-byte quota.
+[TOOLS.md](TOOLS.md) owns the permissions and per-result bounds. Overall
 context capacity is estimated from the complete model request and managed by
 Runtime compaction. Compaction changes effective history without rewriting the
 stored Artifact or append-only execution records. Checkpointing records task
@@ -218,7 +217,7 @@ The target tool stays inline and is classified `local_artifact_read`, read-only.
 In answers it follows the same permissions, 35 KiB per-result bound, duplicate
 rejection, deadlines and unified context governance as `read`, `grep` and
 calculation. The target has no total call or cumulative byte quota; the full
-policy and current implementation gap remain in [TOOLS.md](TOOLS.md).
+policy remains in [TOOLS.md](TOOLS.md).
 
 ### Complete example
 

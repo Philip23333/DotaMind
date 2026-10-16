@@ -82,17 +82,20 @@ def test_permissions_use_properties_not_tool_names():
     assert not invoked
 
 
-def test_duplicate_errors_count_towards_twelve_calls():
+def test_duplicate_errors_are_metered_without_closing_tools():
     async def run():
         session = AnswerToolSession(_registry())
         first = await session.execute(_call(), timeout=1)
         assert first.status == "ok"
-        for index in range(11):
+        for index in range(15):
             result = await session.execute(_call(ident=str(index)), timeout=1)
             assert "identical" in result.error.message
-        assert session.calls == 12
-        assert session.schemas() == []
-        assert session.returned_bytes <= 240 * 1024
+        assert session.calls == 16
+        assert session.schemas()
+        assert (
+            await session.execute(_call(arguments={"expression": "3+4"}), timeout=1)
+        ).status == "ok"
+        assert "Remaining calls" not in session.prompt()
 
     asyncio.run(run())
 
@@ -124,7 +127,7 @@ def test_large_reads_are_not_admitted_and_utf8_is_metered():
     assert "中" not in str(result)
 
 
-def test_cumulative_bytes_reject_large_result_but_allow_narrow_recovery():
+def test_cumulative_bytes_are_metered_without_rejecting_valid_results():
     class Input(BaseModel):
         index: int
 
@@ -154,12 +157,12 @@ def test_cumulative_bytes_reject_large_result_but_allow_narrow_recovery():
         rejected = await session.execute(
             ToolCall(id="7", name="local.read", arguments={"index": 7}), timeout=1
         )
-        assert rejected.status == "error"
+        assert rejected.status == "ok"
         recovered = await session.execute(
             ToolCall(id="8", name="local.read", arguments={"index": 8}), timeout=1
         )
         assert recovered.status == "ok"
-        assert session.returned_bytes <= 240 * 1024
+        assert session.returned_bytes > 240 * 1024
         assert session.calls == 9
 
     asyncio.run(run())
@@ -224,9 +227,9 @@ def test_runtime_rechecks_artifact_then_calculates_and_retains_history():
     asyncio.run(run())
 
 
-def test_runtime_exhaustion_keeps_budget_closed_in_degraded_answer():
+def test_runtime_keeps_tools_available_beyond_old_limit_and_in_degraded_answer():
     calls = [
-        _tool_response([_call(arguments={"expression": str(i)}, ident=str(i))]) for i in range(12)
+        _tool_response([_call(arguments={"expression": str(i)}, ident=str(i))]) for i in range(14)
     ]
     model = ScriptedModelClient(
         [
@@ -241,16 +244,16 @@ def test_runtime_exhaustion_keeps_budget_closed_in_degraded_answer():
             model=model, tools=_registry(), limits=AgentLimits(application_max_output_tokens=1024)
         ).run([UserMessage(content="question")])
     )
-    assert len(model.requests) == 15
-    assert model.requests[-2].tools == []
-    assert model.requests[-1].tools == []
+    assert len(model.requests) == 17
+    assert model.requests[-2].tools
+    assert model.requests[-1].tools
     assert any(
-        m.role == "system" and "Remaining calls: 0" in m.content
+        m.role == "system" and "Calls attempted: 14" in m.content
         for m in model.requests[-1].messages
     )
 
 
-def test_overflow_recovery_does_not_reset_budget_or_repeat_calculation():
+def test_overflow_recovery_does_not_reset_metrics_or_repeat_calculation():
     class Model:
         def __init__(self):
             self.requests = []
@@ -304,7 +307,7 @@ def test_overflow_recovery_does_not_reset_budget_or_repeat_calculation():
     assert results[-1].status == "error"
     assert "identical" in results[-1].error.message
     assert any(
-        m.role == "system" and "Remaining calls: 10" in m.content
+        m.role == "system" and "Calls attempted: 2" in m.content
         for m in model.requests[-1].messages
     )
 

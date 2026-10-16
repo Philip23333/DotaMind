@@ -99,10 +99,16 @@ intended account/time/metric, whether returned values are copied correctly, and
 whether numerical and summary claims are checked. Report input-selection errors
 separately from copying errors; a correct query execution is not answer accuracy.
 
-## Unified two-stage context acceptance (planned; implementation pending)
+## Unified two-stage context acceptance
 
-The target is owned by [ARCHITECTURE.md](ARCHITECTURE.md#two-stage-context-governance-accepted-target-not-implemented).
-These cases are requirements, not completed test results:
+The contract is owned by [ARCHITECTURE.md](ARCHITECTURE.md#two-stage-context-governance).
+`test_answer_tools.py`, `test_answer_watermark.py` and related capacity/overflow
+tests cover the following deterministic behavior. The real-model comparison
+remains pending; passing these checks is not a measured accuracy improvement.
+The actual-capacity fixture performs 14 distinct 28,000-byte Artifact-row reads
+with repeated compaction, exceeding both former quotas without replay or deletion.
+Separate forced-pressure cases cover primary/degraded continuation, no-progress
+protection, still-critical fallback, cancellation and shared deadlines.
 
 - More than 12 permitted answer calls and more than 240 KiB cumulative results
   remain possible within deadlines/capacity; the 35 KiB per-result limit still

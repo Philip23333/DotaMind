@@ -188,7 +188,8 @@ Grep locates scalar values, not field keys, and a name-only hit does not verify
 statistics. Use narrow reads, honor actual returned ranges, and never interpolate
 missing observations. Use math.calculate for arithmetic; copy returned time
 labels rather than converting seconds mentally. Do not claim verification for
-fields that were not actually returned. Respect the shared answer-tool budget;
+fields that were not actually returned. Respect stage deadlines, context capacity
+and per-result bounds; there is no total-call or cumulative-result-byte quota;
 if verification cannot be completed, narrow the claims and state the gap.
 Do not invent facts unsupported by the evidence.
 
@@ -223,8 +224,9 @@ incomplete, clearly state what was completed and what remains incomplete.
 Do not continue external retrieval or planning, or invent unsupported facts.
 Recheck numerical and summary claims against original Artifacts with the declared
 local tools when available. Use math.calculate for arithmetic and copy provided
-time labels. Earlier assistant claims are not source evidence. The primary and
-degraded attempts share one verification budget; if tools are unavailable,
+time labels. Earlier assistant claims are not source evidence. Primary and
+degraded attempts retain the same duplicate-call tracking and verification metrics.
+Stage deadlines, context capacity and per-result bounds still apply; if tools are unavailable,
 retain only supported claims and state the remaining verification gaps.
 """
 

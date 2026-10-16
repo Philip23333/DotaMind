@@ -704,7 +704,9 @@ def test_primary_compaction_and_model_share_one_deadline() -> None:
 
     result = _run(runtime, history, request_id, trace_collector=trace)
 
-    assert "available context budget" in result.content
+    # The shared preflight stops immediately on the expired deadline, before
+    # considering another degraded-stage capacity/compaction attempt.
+    assert "response limit" in result.content
     assert len(captured_deadlines) == 1
     assert len(model.requests) == 1
     assert trace.snapshot()["answer_attempts"][0]["error_code"] == "deadline_exceeded"

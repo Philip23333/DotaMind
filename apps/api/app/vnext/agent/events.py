@@ -125,7 +125,7 @@ class CompactionFailed(AgentEvent):
     kind: Literal["compaction_failed"] = "compaction_failed"
     error_code: Literal["context_compaction_failed"] = "context_compaction_failed"
     trigger: Literal["explicit", "watermark", "overflow"]
-    stage: Literal["execution", "primary_answer"]
+    stage: Literal["execution", "primary_answer", "degraded_answer"]
     summary_kind: Literal["history", "turn_prefix"] | None
     reason_code: str = Field(min_length=1)
     attempt_count: int = Field(ge=0)
