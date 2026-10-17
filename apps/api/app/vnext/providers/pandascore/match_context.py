@@ -11,6 +11,7 @@ from typing import Any, cast
 import httpx
 from pydantic import JsonValue
 
+from app.vnext.providers.source_reads import read_source
 from app.vnext.tools.errors import StructuredToolError
 
 from .client import (
@@ -59,6 +60,12 @@ class PandaScoreMatchContextAdapter:
     async def get_match_context(self, match_id: int) -> dict[str, JsonValue] | None:
         if type(match_id) is not int or match_id <= 0:
             raise ValueError("match_id must be a positive integer")
+
+        return await read_source(
+            self, "match_context", match_id, lambda: self._get_match_context(match_id)
+        )
+
+    async def _get_match_context(self, match_id: int) -> dict[str, JsonValue] | None:
 
         rows = await self._request(
             lambda: self.client.get_list(

@@ -101,6 +101,7 @@ from app.vnext.providers.pandascore.player_adapter import PandaScorePlayerAdapte
 from app.vnext.providers.pandascore.series_adapter import PandaScoreSeriesAdapter
 from app.vnext.providers.pandascore.team_adapter import PandaScoreTeamAdapter
 from app.vnext.providers.pandascore.tournament_adapter import PandaScoreTournamentAdapter
+from app.vnext.providers.source_reads import source_read_scope
 from app.vnext.providers.stratz import (
     StratzGraphQLClient,
     StratzPlayerProfileAdapter,
@@ -944,6 +945,7 @@ def build_vnext_runtime(
         settings=config,
         task_state_coordinator=task_state_coordinator,
     )
+
     shared_instruction = PRODUCT_INSTRUCTION
     if resolved_services.tavily_web_search is not None:
         shared_instruction = f"{PRODUCT_INSTRUCTION}\n\n{WEB_SEARCH_INSTRUCTION}"
@@ -956,6 +958,7 @@ def build_vnext_runtime(
         limits=limits,
         transcript_rewriter=ArtifactObservationTranscriptRewriter(),
         task_state_coordinator=task_state_coordinator,
+        request_scope=source_read_scope,
     )
 
 

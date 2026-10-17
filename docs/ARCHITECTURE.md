@@ -808,6 +808,18 @@ the Runtime tool timeout or original execution deadline. Offline product-chain
 acceptance uses saved historical responses through strict HTTP mocks and does not
 establish live Provider availability or real-model behavior.
 
+Product composition binds a fresh internal source-read cache to each Runtime run
+through a generic request-resource scope. Match context, the OpenDota League
+directory, League match lists, and validated game records are reused within that
+run, including candidate-detail reuse by `game.detail`. Successful empty results
+are reusable; errors and cancelled reads are not cached. Adapter instances and
+source identities isolate keys, per-key locks coalesce concurrent reads, and
+callers receive independent copies retaining original record retrieval times.
+The cache is discarded when the run completes, fails, is cancelled, or its stream
+is closed; sessions and later requests do not share it. It owns no model-facing
+Artifact or identity decision. Logical adapter-read budgets still count cache
+hits; request logs separately report actual source-read attempts and cache hits.
+
 ## Steam player and game-detail boundaries
 
 The `capabilities/player` and `capabilities/game` contracts define closed

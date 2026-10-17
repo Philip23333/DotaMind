@@ -731,7 +731,7 @@ whole-Match consistency, are therefore not guaranteed.
 
 The initial read policy defaults to 1,800 seconds start-time tolerance, 5 seconds
 duration tolerance, at most 20 League candidates, 8 candidate details, and 30
-total adapter requests. Configure it with
+total logical adapter reads (including cache hits). Configure it with
 `DOTAMIND_GAME_RESOLUTION_START_TOLERANCE_SECONDS`,
 `DOTAMIND_GAME_RESOLUTION_DURATION_TOLERANCE_SECONDS`,
 `DOTAMIND_GAME_RESOLUTION_MAX_LEAGUES`,
@@ -740,6 +740,15 @@ total adapter requests. Configure it with
 not validated accuracy or coverage targets. Runtime's default 60-second tool
 timeout and the original execution deadline still apply; the request budget does
 not guarantee that every permitted read finishes before the deadline.
+
+Within one product Runtime request, successful validated Match context, League
+directory/list reads, and OpenDota game records are reused. `game.detail` can
+project a record already read by resolution without another remote fetch. Each
+game still receives full independent identity checks over the selected scope.
+The cache is internal, returns independent copies with original record timestamps,
+and is released at request completion or cancellation; it is not an Artifact or
+a cross-request cache. Failed reads are not cached. The public `requests_started`
+count remains logical reads; source-read logs distinguish remote attempts from hits.
 
 The implemented internal capability result is `EsportsGameResolutionResult`:
 

@@ -15,6 +15,7 @@ from pydantic import (
     field_validator,
 )
 
+from app.vnext.providers.source_reads import read_source
 from app.vnext.tools.errors import StructuredToolError
 
 from .client import (
@@ -91,6 +92,11 @@ class OpenDotaGameDetailAdapter:
     async def get_game_record(self, match_id: int) -> OpenDotaGameRecord:
         if type(match_id) is not int or match_id <= 0:
             raise ValueError("match_id must be a positive integer")
+        return await read_source(
+            self, "game_detail", match_id, lambda: self._get_game_record(match_id)
+        )
+
+    async def _get_game_record(self, match_id: int) -> OpenDotaGameRecord:
         try:
             payload = await self.client.get_match(match_id)
         except OpenDotaTimeoutError:

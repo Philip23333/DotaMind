@@ -6,7 +6,7 @@ import asyncio
 import inspect
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
-from contextlib import aclosing
+from contextlib import AbstractContextManager, aclosing, nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
 from time import monotonic
@@ -214,6 +214,7 @@ class AgentRuntime:
         shared_instruction: str | None = None,
         transcript_rewriter: TranscriptRewriter | None = None,
         task_state_coordinator: TaskStateCoordinator | None = None,
+        request_scope: Callable[[], AbstractContextManager[Any]] | None = None,
     ) -> None:
         self.model = model
         self.tools = tools
@@ -223,6 +224,7 @@ class AgentRuntime:
         self.shared_instruction = shared_instruction
         self.transcript_rewriter = transcript_rewriter
         self.task_state_coordinator = task_state_coordinator
+        self.request_scope = request_scope or nullcontext
 
     def reset_request_state(self) -> None:
         """Reset stateful execution helpers before a new request."""
@@ -260,6 +262,34 @@ class AgentRuntime:
         return final
 
     async def run_stream(
+        self,
+        messages: Sequence[Message],
+        *,
+        cancellation_token: CancellationToken | None = None,
+        event_sink: EventSink | None = None,
+        trace_collector: AgentTraceCollector | None = None,
+        execution_history: Any | None = None,
+        request_id: Any | None = None,
+        compact_before_steps: Sequence[int] = (),
+    ) -> AsyncIterator[AgentEvent]:
+        """Bind application-owned resources to this run, including early closure."""
+
+        with self.request_scope():
+            async with aclosing(
+                self._run_stream(
+                    messages,
+                    cancellation_token=cancellation_token,
+                    event_sink=event_sink,
+                    trace_collector=trace_collector,
+                    execution_history=execution_history,
+                    request_id=request_id,
+                    compact_before_steps=compact_before_steps,
+                )
+            ) as events:
+                async for event in events:
+                    yield event
+
+    async def _run_stream(
         self,
         messages: Sequence[Message],
         *,

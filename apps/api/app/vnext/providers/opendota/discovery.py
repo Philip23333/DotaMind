@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from pydantic import JsonValue
 
+from app.vnext.providers.source_reads import read_source
 from app.vnext.tools.errors import StructuredToolError
 
 from .client import (
@@ -42,12 +43,20 @@ class OpenDotaDiscoveryAdapter:
         self.client = client
 
     async def get_leagues(self) -> list[dict[str, JsonValue]]:
+        return await read_source(self, "leagues", None, self._get_leagues)
+
+    async def _get_leagues(self) -> list[dict[str, JsonValue]]:
         payload = await self._request(self.client.get_leagues)
         return _validate_leagues(payload)
 
     async def get_league_matches(self, league_id: int) -> list[dict[str, JsonValue]]:
         if type(league_id) is not int or league_id <= 0:
             raise ValueError("OpenDota league_id must be a positive integer")
+        return await read_source(
+            self, "league_matches", league_id, lambda: self._get_league_matches(league_id)
+        )
+
+    async def _get_league_matches(self, league_id: int) -> list[dict[str, JsonValue]]:
         payload = await self._request(
             lambda: self.client.get_league_matches(league_id)
         )

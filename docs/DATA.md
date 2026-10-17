@@ -266,6 +266,14 @@ or a similarity score, and does not copy full OpenDota details into its result.
 
 ### Recovery and whole-Match consistency
 
+Within one product request, already validated internal source records may be
+reused across single-game resolutions and `game.detail`. Preserve complete source
+values and the original record retrieval timestamp; reuse does not refresh it or
+confirm another game's identity. Each consumer receives an independent copy.
+Successful empty collections remain distinct from failed reads, which are never
+cached as empty successes. Request-scoped source reuse is discarded after the
+request and exposes no model-visible path to internal candidate detail bodies.
+
 The multi-League resolver is limited to the selected, fully supplied League
 lists and the caller's normal time/duration window. It does not prove that a
 PandaScore League or Series is identical to an OpenDota League. Search widening,

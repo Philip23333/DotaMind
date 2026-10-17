@@ -909,6 +909,14 @@ successful reads, and Provider errors or cancellation stop later calls. These
 tests validate local orchestration and conversion only; they do not call
 PandaScore or OpenDota and do not validate live source availability.
 
+Source-reuse acceptance covers independent consumer copies, successful empty and
+missing results, failures/cancellation without cached errors, concurrent identical
+reads, concurrent request isolation, and cleanup after early stream closure.
+Product-composed Runtime checks repeat resolution then request `game.detail`,
+assert unchanged public evidence/logical read counts, four remote source reads
+per historical one-League run, and fresh reads on the next run. These are offline
+transport counts, not measured live-provider latency improvements.
+
 The historical-response integration test adds a separate adapter-backed offline
 layer. It loads the complete saved PandaScore Match `1743565`, OpenDota League
 collection (10,352 rows), League `19944` match list (353 rows), and Valve Game

@@ -11,10 +11,12 @@ import pytest
 
 from app.vnext import composition
 from app.vnext.composition import VNextSettings, build_vnext_registry, build_vnext_services
-from app.vnext.llm.protocol import ToolCall
+from app.vnext.llm.protocol import AssistantMessage, ModelResponse, ToolCall, UserMessage
 from app.vnext.providers.match_resolution import GameResolutionReadPolicy
 from app.vnext.providers.opendota.client import OpenDotaClient as RealOpenDotaClient
 from app.vnext.providers.pandascore.client import PandaScoreClient as RealPandaScoreClient
+from app.vnext.providers.source_reads import source_read_scope
+from tests.vnext.fakes import ScriptedModelClient
 
 _FIXTURE_DIR = Path(__file__).parent / "fixtures" / "game_resolution"
 _MATCH_ID = 1_743_565
@@ -148,6 +150,58 @@ async def _search_match(registry) -> str:
     assert result.content["externalized"] is True
     assert result.content["value"]["items"][0]["id"] == _MATCH_ID
     return result.content["artifact_ref"]
+
+
+@_async_test
+async def test_request_reuses_resolution_sources_and_detail_without_changing_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _settings, _services, registry, requests = _product_stack(monkeypatch)
+    match_ref = await _search_match(registry)
+    query = _call("esports.game.resolve", {
+        "match_artifact_ref": match_ref, "match_path": "items.0", "game_position": 1,
+    })
+    with source_read_scope() as cache:
+        first = await registry.execute(query)
+        second = await registry.execute(query)
+        assert first.status == second.status == "ok"
+        assert second.content["value"]["valve_game_id"] == _VALVE_GAME_ID
+        assert second.content["value"]["data"]["requests_started"] == 4
+        detail = await registry.execute(_call("game.detail", {"valve_game_id": _VALVE_GAME_ID}))
+        assert detail.status == "ok"
+        assert (cache.remote_reads, cache.cache_hits) == (4, 5)
+    assert len(requests) == 5  # One search, four shared resolution reads, no extra detail GET.
+    with source_read_scope():
+        assert (await registry.execute(query)).status == "ok"
+    assert len(requests) == 9  # A new user request obtains a new source snapshot.
+
+
+@_async_test
+async def test_product_runtime_binds_sources_to_one_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings, services, _registry, requests = _product_stack(monkeypatch)
+    settings.agent_limits.application_max_output_tokens = 4096
+    runtime = composition.build_vnext_runtime(settings, services=services)
+    match_ref = await _search_match(runtime.tools)
+
+    def resolve_turn(call_id):
+        return ModelResponse(message=AssistantMessage(tool_calls=[ToolCall(
+            id=call_id, name="esports.game.resolve", arguments={
+                "match_artifact_ref": match_ref, "match_path": "items.0", "game_position": 1,
+            },
+        )]))
+
+    for _ in range(2):
+        runtime.model = ScriptedModelClient([
+            resolve_turn("resolve-1"), resolve_turn("resolve-2"),
+            ModelResponse(message=AssistantMessage(tool_calls=[ToolCall(
+                id="detail", name="game.detail", arguments={"valve_game_id": _VALVE_GAME_ID},
+            )])),
+            ModelResponse.from_final("done"),
+        ])
+        await runtime.run([UserMessage(content="resolve the selected game and inspect details")])
+    assert len(requests) == 9  # One search + four source GETs per run, including detail reuse.
 
 
 @_async_test
