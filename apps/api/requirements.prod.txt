@@ -154,6 +154,8 @@ python-dotenv==1.2.2
     #   dotamind-api
     #   pydantic-settings
     #   uvicorn
+python-jsonpath==2.2.1
+    # via dotamind-api
 python-multipart==0.0.32
     # via mcp
 pywin32==312 ; sys_platform == 'win32'

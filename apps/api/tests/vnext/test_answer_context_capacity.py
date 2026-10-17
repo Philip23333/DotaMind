@@ -30,7 +30,6 @@ from app.vnext.agent.task_state import TaskStateCoordinator
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.llm.protocol import (
     AssistantMessage,
-    FinalMessage,
     ModelResponse,
     ToolCall,
     ToolResultMessage,
@@ -108,6 +107,8 @@ def _answer_request(
     projection_mode: AnswerProjectionMode = AnswerProjectionMode.PRIMARY,
     reason: ExecutionStopReason = ExecutionStopReason.MODEL_DONE,
     step: int = 2,
+    shared_instruction: str | None = None,
+    execution_conclusion: ModelResponse | None = None,
 ):
     projected_messages = (
         history.effective_messages() if execution_messages is None else execution_messages
@@ -124,6 +125,7 @@ def _answer_request(
     )
     return _build_answer_request(
         instruction=instruction,
+        shared_instruction=shared_instruction,
         runtime_prompt=render_runtime_prompt(
             RuntimeContext.from_state(
                 current_step=step,
@@ -136,6 +138,7 @@ def _answer_request(
         messages=_project_session_context(projected_messages, history),
         context=context,
         step=step,
+        execution_conclusion=execution_conclusion,
         max_output_tokens=(
             limits.application_max_output_tokens
             if limits.context_window_tokens is not None
@@ -347,8 +350,14 @@ def test_execution_capacity_attempt_is_not_repeated_by_primary_answer() -> None:
     history, request_id = _history_with_old_group()
     registry = _echo_registry()
     probe_limits = _limits_for_available(100_000)
+    # Shared instructions pressure both business stages but are not part of the
+    # summary source. This leaves room for a valid summary even when the rebuilt
+    # business request still cannot fit.
+    shared_instruction = "Shared capacity fixture rule.\n" * 1_024
     compacted = _committed_history(history, cut_index=3)
-    final_request = _probe_request(compacted, registry, limits=probe_limits)
+    final_request = _probe_request(
+        compacted, registry, limits=probe_limits, shared_instruction=shared_instruction
+    )
     final_capacity = assess_request_capacity(final_request, probe_limits)
     assert final_capacity is not None
     limits = _limits_for_available(final_capacity.estimated_input_tokens - 64)
@@ -358,18 +367,21 @@ def test_execution_capacity_attempt_is_not_repeated_by_primary_answer() -> None:
     trace = AgentTraceCollector()
 
     result = _run(
-        AgentRuntime(model, registry, limits=limits),
+        AgentRuntime(model, registry, limits=limits, shared_instruction=shared_instruction),
         history,
         request_id,
         trace_collector=trace,
     )
 
     assert "available context budget" in result.content
-    assert len(trace.snapshot()["compaction_calls"]) == 1
-    assert [commit["step"] for commit in trace.snapshot()["compaction_commits"]] == [1]
+    snapshot = trace.snapshot()
+    assert snapshot["compaction_capacity_checks"][0]["fits"] is True
+    assert len(snapshot["compaction_calls"]) == 1
+    assert snapshot["compaction_calls"][0]["status"] == "generated"
+    assert [commit["step"] for commit in snapshot["compaction_commits"]] == [1]
     assert not any(
         item["stage"] == "primary_answer" and item["phase"] == "before_compaction"
-        for item in trace.snapshot()["context_capacity_checks"]
+        for item in snapshot["context_capacity_checks"]
     )
     assert len(model.requests) == 1
 
@@ -378,21 +390,42 @@ def test_final_message_does_not_reopen_primary_compaction_gate() -> None:
     history, request_id = _history_with_old_groups()
     registry = _echo_registry(output_size=4_000)
     probe_limits = _limits_for_available(100_000, recent_tokens=1)
+    # Keep the summary request within its window while exercising business
+    # pressure from instructions that compaction cannot remove.
+    shared_instruction = "Shared capacity fixture rule.\n" * 1_024
     first_compacted, _ = _history_with_old_groups()
-    first_compacted = _committed_history(first_compacted, cut_index=3, summary="summary one")
-    after_tool, _ = _history_with_new_tool(first_compacted, output_size=4_000)
-    final_history = _committed_history(after_tool, cut_index=3, summary="summary two")
-    final_execution = FinalMessage(content="execution")
+    # With a one-token recent budget, the actual cut retains only the current
+    # user message, after both old tool groups.
+    first_compacted = _committed_history(first_compacted, cut_index=5, summary="summary one")
+    after_first_request = _probe_request(
+        first_compacted, registry, limits=probe_limits, shared_instruction=shared_instruction
+    )
+    # Append in the same session: copying only effective messages into a fresh
+    # history would lose the summary that the real answer request still carries.
+    after_tool = first_compacted
+    new_call = _echo_call("new-call", "new")
+    after_tool.set_effective(
+        [
+            *after_tool.effective_messages(),
+            AssistantMessage(tool_calls=[new_call]),
+            ToolResultMessage(tool_call_id=new_call.id, content={"text": "new" + "x" * 4_000}),
+        ]
+    )
+    execution_conclusion = ModelResponse.from_final("execution final", finish_reason="stop")
     requests = {
-        "initial": _probe_request(history, registry, limits=probe_limits),
-        "after_first": _probe_request(first_compacted, registry, limits=probe_limits),
-        "after_tool": _probe_request(after_tool, registry, limits=probe_limits),
-        "answer_before": _answer_request(after_tool, limits=probe_limits, step=3),
-        "answer_after": _answer_request(
-            final_history,
+        "initial": _probe_request(
+            history, registry, limits=probe_limits, shared_instruction=shared_instruction
+        ),
+        "after_first": after_first_request,
+        "after_tool": _probe_request(
+            after_tool, registry, limits=probe_limits, shared_instruction=shared_instruction
+        ),
+        "answer": _answer_request(
+            after_tool,
             limits=probe_limits,
-            execution_messages=[*final_history.effective_messages(), final_execution],
             step=3,
+            shared_instruction=shared_instruction,
+            execution_conclusion=execution_conclusion,
         ),
     }
     estimates = _capacity_estimates(requests, probe_limits=probe_limits)
@@ -401,9 +434,8 @@ def test_final_message_does_not_reopen_primary_compaction_gate() -> None:
         lambda capacities: (
             _capacity_pressure(capacities, "initial") == "critical"
             and _capacity_pressure(capacities, "after_first") != "critical"
-            and _capacity_pressure(capacities, "after_tool") != "critical"
-            and _capacity_pressure(capacities, "answer_before") in {"high", "critical"}
-            and _capacity_pressure(capacities, "answer_after") != "critical"
+            and _capacity_pressure(capacities, "after_tool") == "high"
+            and _capacity_pressure(capacities, "answer") == "high"
         ),
         recent_tokens=1,
     )
@@ -413,23 +445,24 @@ def test_final_message_does_not_reopen_primary_compaction_gate() -> None:
             ModelResponse.from_assistant(
                 AssistantMessage(tool_calls=[_echo_call("new-call", "new")])
             ),
-            ModelResponse.from_final("summary two", finish_reason="stop"),
-            ModelResponse.from_final("execution", finish_reason="stop"),
+            execution_conclusion,
+            ModelResponse.from_final("answer", finish_reason="stop"),
         ]
     )
     trace = AgentTraceCollector()
 
     result = _run(
-        AgentRuntime(model, registry, limits=limits),
+        AgentRuntime(model, registry, limits=limits, shared_instruction=shared_instruction),
         history,
         request_id,
         trace_collector=trace,
     )
 
-    assert result.content == "execution"
+    assert result.content == "answer"
     assert len(model.requests) == 4
     assert [commit["step"] for commit in trace.snapshot()["compaction_commits"]] == [1]
     assert [call["step"] for call in trace.snapshot()["compaction_calls"]] == [1]
+    assert trace.snapshot()["compaction_capacity_checks"][0]["fits"] is True
     assert [
         item["stage"]
         for item in trace.snapshot()["context_capacity_checks"]
@@ -441,7 +474,7 @@ def test_final_message_does_not_reopen_primary_compaction_gate() -> None:
         if item["stage"] == "primary_answer"
     ]
     assert [item["phase"] for item in primary_checks] == ["before_model"]
-    assert primary_checks[0]["capacity"]["pressure"] in {"normal", "high"}
+    assert primary_checks[0]["capacity"]["pressure"] == "high"
     assert history.summary == "summary one"
 
 
