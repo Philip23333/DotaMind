@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -48,6 +49,7 @@ class GameResolutionReadPolicy:
     max_leagues: int
     max_candidate_details: int
     max_requests: int
+    max_concurrency: int = 4
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -57,7 +59,9 @@ class GameResolutionReadPolicy:
             value = getattr(self, field_name)
             if type(value) is not int or value < 0:
                 raise ValueError(f"{field_name} must be a non-negative integer")
-        for field_name in ("max_leagues", "max_candidate_details", "max_requests"):
+        for field_name in (
+            "max_leagues", "max_candidate_details", "max_requests", "max_concurrency",
+        ):
             value = getattr(self, field_name)
             if type(value) is not int or value <= 0:
                 raise ValueError(f"{field_name} must be a positive integer")
@@ -239,14 +243,16 @@ class PandaScoreOpenDotaGameResolutionProvider:
             requests_started=requests_started,
             required=len(selected_league_ids),
         )
-        for league_id in selected_league_ids:
+        async def read_league(league_id: int):
             rows = await read(
                 "league_matches",
-                lambda league_id=league_id: self._opendota_discovery.get_league_matches(
-                    league_id
-                ),
+                lambda: self._opendota_discovery.get_league_matches(league_id),
             )
-            league_matches_by_id[league_id] = tuple(rows)
+            return tuple(rows)
+
+        league_matches_by_id = await _read_phase(
+            selected_league_ids, read_league, max_concurrency=policy.max_concurrency
+        )
 
         valve_game_ids = _candidate_valve_game_ids(
             match_context,
@@ -270,18 +276,20 @@ class PandaScoreOpenDotaGameResolutionProvider:
             requests_started=requests_started,
             required=len(valve_game_ids),
         )
-        for valve_game_id in valve_game_ids:
+        async def read_detail(valve_game_id: int):
             detail = await read(
                 "game_detail",
-                lambda valve_game_id=valve_game_id: self._opendota_game_detail.get_game_record(
-                    valve_game_id
-                ),
+                lambda: self._opendota_game_detail.get_game_record(valve_game_id),
             )
             if not isinstance(detail, OpenDotaGameRecord):
                 raise TypeError("OpenDota detail adapter returned an invalid result")
             if detail.match_id != valve_game_id:
                 raise ValueError("OpenDota detail identity changed after validation")
-            candidate_details[valve_game_id] = detail
+            return detail
+
+        candidate_details = await _read_phase(
+            valve_game_ids, read_detail, max_concurrency=policy.max_concurrency
+        )
 
         resolution_result = resolve_game_across_leagues(
             match_context,
@@ -294,6 +302,42 @@ class PandaScoreOpenDotaGameResolutionProvider:
             confirmed_mappings=confirmed_mappings,
         )
         return finish(stage="resolution", reason=resolution_result.reason)
+
+
+async def _read_phase(
+    identities: Sequence[int],
+    fetch: Callable[[int], Awaitable[_T]],
+    *,
+    max_concurrency: int,
+) -> dict[int, _T]:
+    """Bound active workers, retain source order, and join cancelled siblings."""
+
+    pending = iter(identities)
+    results: dict[int, _T] = {}
+    stopped = False
+
+    async def worker() -> None:
+        nonlocal stopped
+        try:
+            for identity in pending:
+                if stopped:
+                    return
+                results[identity] = await fetch(identity)
+        except BaseException:
+            stopped = True
+            raise
+
+    workers = [
+        asyncio.create_task(worker()) for _ in range(min(max_concurrency, len(identities)))
+    ]
+    try:
+        await asyncio.gather(*workers)
+    except BaseException:
+        for task in workers:
+            task.cancel()
+        await asyncio.gather(*workers, return_exceptions=True)
+        raise
+    return {identity: results[identity] for identity in identities}
 
 
 def _validate_request(

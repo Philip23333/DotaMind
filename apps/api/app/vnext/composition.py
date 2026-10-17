@@ -160,6 +160,7 @@ def _default_game_resolution_read_policy() -> GameResolutionReadPolicy:
         max_leagues=20,
         max_candidate_details=8,
         max_requests=30,
+        max_concurrency=4,
     )
 
 
@@ -531,6 +532,7 @@ def _game_resolution_read_policy_from_env(
             "max_candidate_details",
         ),
         ("DOTAMIND_GAME_RESOLUTION_MAX_REQUESTS", "max_requests"),
+        ("DOTAMIND_GAME_RESOLUTION_MAX_CONCURRENCY", "max_concurrency"),
     ):
         default = getattr(defaults, field_name)
         raw_value = _env_value(name, str(default), file_values)

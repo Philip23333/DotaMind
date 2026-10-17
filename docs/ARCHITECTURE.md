@@ -820,6 +820,14 @@ is closed; sessions and later requests do not share it. It owns no model-facing
 Artifact or identity decision. Logical adapter-read budgets still count cache
 hits; request logs separately report actual source-read attempts and cache hits.
 
+Within each resolution, independent League-list reads and then independent
+candidate-detail reads use bounded workers (default 4, configured by
+`DOTAMIND_GAME_RESOLUTION_MAX_CONCURRENCY`). The two phases remain sequential and
+retain their full budget prechecks. Completion order does not change source order
+or matching decisions. Failure or caller cancellation stops queued work and joins
+cancelled active workers before propagating the original error; no partial scope
+can produce success. This is a per-call concurrency bound, not a global limiter.
+
 ## Steam player and game-detail boundaries
 
 The `capabilities/player` and `capabilities/game` contracts define closed

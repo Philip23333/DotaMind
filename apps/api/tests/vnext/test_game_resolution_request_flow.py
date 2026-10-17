@@ -108,6 +108,7 @@ def _policy(
     max_leagues: int = 10,
     max_candidate_details: int = 10,
     max_requests: int = 30,
+    max_concurrency: int = 4,
 ) -> GameResolutionReadPolicy:
     return GameResolutionReadPolicy(
         start_time_tolerance_seconds=180,
@@ -115,6 +116,7 @@ def _policy(
         max_leagues=max_leagues,
         max_candidate_details=max_candidate_details,
         max_requests=max_requests,
+        max_concurrency=max_concurrency,
     )
 
 
@@ -558,6 +560,192 @@ async def test_cancelled_adapter_wait_propagates_without_followup_reads() -> Non
 
 
 @_async_test
+@pytest.mark.parametrize("concurrency", [1, 2, 4])
+async def test_both_read_phases_are_bounded_parallel_and_preserve_results(concurrency: int) -> None:
+    league_ids = list(range(19102, 19110))
+    valve_ids = list(range(_VALVE_ID, _VALVE_ID + 8))
+    sources = {
+        "leagues": [_league(i) for i in league_ids],
+        "league_matches": {
+            league: [_row(valve, league_id=league)]
+            for league, valve in zip(league_ids, valve_ids, strict=True)
+        },
+        "details": {i: _detail(i) for i in valve_ids},
+    }
+    provider, calls = _provider(**sources)
+    entered = [asyncio.Event(), asyncio.Event()]
+    release = [asyncio.Event(), asyncio.Event()]
+    active, peaks, completed = [0, 0], [0, 0], [0, 0]
+
+    def gated(original, stage):
+        async def fetch(identity):
+            if stage == 1:
+                assert completed[0] == 8  # All lists must finish before details start.
+            active[stage] += 1
+            peaks[stage] = max(peaks[stage], active[stage])
+            if active[stage] == concurrency:
+                entered[stage].set()
+            try:
+                await release[stage].wait()
+                result = await original(identity)
+                completed[stage] += 1
+                return result
+            finally:
+                active[stage] -= 1
+
+        return fetch
+
+    provider._opendota_discovery.get_league_matches = gated(
+        provider._opendota_discovery.get_league_matches, 0
+    )
+    provider._opendota_game_detail.get_game_record = gated(
+        provider._opendota_game_detail.get_game_record, 1
+    )
+    task = asyncio.create_task(provider.resolve(
+        1_709_131, 4, policy=_policy(max_concurrency=concurrency), confirmed_mappings={}
+    ))
+    try:
+        await asyncio.wait_for(entered[0].wait(), 2)
+        assert peaks[0] == concurrency and active[1] == 0
+        release[0].set()
+        await asyncio.wait_for(entered[1].wait(), 2)
+        assert peaks[1] == concurrency
+        release[1].set()
+        result = await asyncio.wait_for(task, 2)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    assert peaks == [concurrency, concurrency]
+    assert active == [0, 0]
+    assert result.requests_started == len(calls) == 18
+    assert list(result.league_matches_by_id) == league_ids
+    assert list(result.candidate_details) == valve_ids
+    serial_provider, _ = _provider(**sources)
+    serial_result = await serial_provider.resolve(
+        1_709_131, 4, policy=_policy(max_concurrency=1), confirmed_mappings={}
+    )
+    assert result.resolution_result == serial_result.resolution_result
+
+
+@_async_test
+@pytest.mark.parametrize("stage", ["league_matches", "game_detail"])
+@pytest.mark.parametrize("stop", ["failure", "cancel"])
+async def test_parallel_failure_and_cancellation_join_siblings_and_stop_queue(
+    stage: str, stop: str,
+) -> None:
+    league_ids = list(range(19102, 19110))
+    valve_ids = list(range(_VALVE_ID, _VALVE_ID + 8))
+    provider, calls = _provider(
+        leagues=[_league(i) for i in league_ids],
+        league_matches={
+            league: [_row(valve, league_id=league)]
+            for league, valve in zip(league_ids, valve_ids, strict=True)
+        },
+        details={i: _detail(i) for i in valve_ids},
+    )
+    entered, fail_now = asyncio.Event(), asyncio.Event()
+    started, cancelled, active = [], [], 0
+
+    async def block(identity):
+        nonlocal active
+        started.append(identity)
+        active += 1
+        if len(started) == 4:
+            entered.set()
+        try:
+            if identity == started[0] and stop == "failure":
+                await fail_now.wait()
+                raise _provider_error()
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.append(identity)
+            raise
+        finally:
+            active -= 1
+
+    if stage == "league_matches":
+        provider._opendota_discovery.get_league_matches = block
+    else:
+        provider._opendota_game_detail.get_game_record = block
+    task = asyncio.create_task(provider.resolve(
+        1_709_131, 4, policy=_policy(), confirmed_mappings={}
+    ))
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        if stop == "failure":
+            fail_now.set()
+            with pytest.raises(StructuredToolError) as error:
+                await asyncio.wait_for(task, 2)
+            assert error.value.code == "provider_timeout"
+            assert error.value.details["operation"] == stage
+        else:
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    assert active == 0
+    assert len(started) == 4  # Queued reads never start after failure/cancellation.
+    assert len(cancelled) == (3 if stop == "failure" else 4)
+    if stage == "league_matches":
+        assert not any(operation == "game_detail" for operation, _ in calls)
+
+
+@_async_test
+async def test_reverse_completion_order_retains_source_order_and_global_ambiguity() -> None:
+    leagues, valves = [19102, 19103], [_VALVE_ID, _VALVE_ID + 1]
+    provider, _ = _provider(
+        leagues=[_league(i) for i in leagues],
+        league_matches={
+            league: [_row(valve, league_id=league)]
+            for league, valve in zip(leagues, valves, strict=True)
+        },
+        details={i: _detail(i) for i in valves},
+    )
+    gates = []
+
+    def reversed_reads(original, identities):
+        entered = {i: asyncio.Event() for i in identities}
+        release = {i: asyncio.Event() for i in identities}
+        finished = {i: asyncio.Event() for i in identities}
+        gates.append((identities, entered, release, finished))
+
+        async def fetch(identity):
+            entered[identity].set()
+            await release[identity].wait()
+            result = await original(identity)
+            finished[identity].set()
+            return result
+
+        return fetch
+
+    provider._opendota_discovery.get_league_matches = reversed_reads(
+        provider._opendota_discovery.get_league_matches, leagues
+    )
+    provider._opendota_game_detail.get_game_record = reversed_reads(
+        provider._opendota_game_detail.get_game_record, valves
+    )
+    task = asyncio.create_task(provider.resolve(
+        1_709_131, 4, policy=_policy(max_concurrency=2), confirmed_mappings={}
+    ))
+    try:
+        for identities, entered, release, finished in gates:
+            await asyncio.wait_for(asyncio.gather(*(e.wait() for e in entered.values())), 2)
+            release[identities[1]].set()
+            await asyncio.wait_for(finished[identities[1]].wait(), 2)
+            assert not finished[identities[0]].is_set()
+            release[identities[0]].set()
+        attempt = await asyncio.wait_for(task, 2)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    assert list(attempt.league_matches_by_id) == leagues
+    assert list(attempt.candidate_details) == valves
+    assert attempt.resolution_result.category == "ambiguous"
+
+
+@_async_test
 @pytest.mark.parametrize("match_id,position", [(True, 4), (1_709_131, False), (0, 4)])
 async def test_invalid_identity_inputs_are_rejected_before_any_read(
     match_id: Any,
@@ -605,6 +793,8 @@ async def test_invalid_confirmed_mappings_are_rejected_before_any_read(
         ("max_leagues", 0),
         ("max_candidate_details", 1.5),
         ("max_requests", False),
+        ("max_concurrency", True),
+        ("max_concurrency", 0),
     ],
 )
 def test_invalid_policy_values_are_rejected(field: str, value: Any) -> None:

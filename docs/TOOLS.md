@@ -741,6 +741,15 @@ not validated accuracy or coverage targets. Runtime's default 60-second tool
 timeout and the original execution deadline still apply; the request budget does
 not guarantee that every permitted read finishes before the deadline.
 
+`DOTAMIND_GAME_RESOLUTION_MAX_CONCURRENCY` defaults to 4; set it to 1 for serial
+reads. Each resolution reads Match context and the League directory before its
+dependent phases. League-list reads run concurrently within one phase, followed
+by concurrent candidate-detail reads only after every selected list has completed.
+Each phase checks its full logical request budget before starting. Workers retain
+source order in the collected result; a failure stops queued work, cancels and
+joins active siblings, and preserves the original structured error/cancellation.
+The bound applies per resolution call, not across all API users.
+
 Within one product Runtime request, successful validated Match context, League
 directory/list reads, and OpenDota game records are reused. `game.detail` can
 project a record already read by resolution without another remote fetch. Each

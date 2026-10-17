@@ -863,7 +863,7 @@ known limitations are maintained in
 The current PandaScore esports capabilities and `game.detail` exist. Provider-
 side offline League candidate discovery, game candidate filtering, evidence
 comparison, single-League and multi-League normal-window resolution, a bounded
-serialized adapter-read flow, and the capability result/Service conversion are
+phase-ordered concurrent adapter-read flow, and the capability result/Service conversion are
 implemented. The Service validates attempt identity, publishes selected existing
 evidence results without raw read collections, maps unresolved categories, and
 converts budget exhaustion to a stable structured error. Product composition registers the model-facing tool only
@@ -873,7 +873,7 @@ layers:
 
 | Layer | Evidence required |
 |---|---|
-| Deterministic tests | League brand/season/year candidates and explicit limits; serialized Match/League/list/detail reads; phase-wide request and record-budget prechecks; duplicate League and Valve IDs; provider-error classification and cancellation; internal complete source-record retention; global decisions across selected League scopes; absent versus explicitly empty lists; per-League assessment merging; detail-ID validation; same-window detail recheck; participant/winner evidence; competing candidates; mapping conflicts; input immutability; capability result invariants and closed reasons; one Provider call with unchanged inputs; stable budget-error mapping; unchanged Provider errors/cancellation; public evidence projection without raw source collections; and the historical BLAST Game 4 result through the bounded read flow and Service |
+| Deterministic tests | League brand/season/year candidates and explicit limits; dependent Match/League reads and bounded concurrent list/detail phases; phase-wide request and record-budget prechecks; duplicate League and Valve IDs; provider-error classification and cancellation; internal complete source-record retention; global decisions across selected League scopes; absent versus explicitly empty lists; per-League assessment merging; detail-ID validation; same-window detail recheck; participant/winner evidence; competing candidates; mapping conflicts; input immutability; capability result invariants and closed reasons; one Provider call with unchanged inputs; stable budget-error mapping; unchanged Provider errors/cancellation; public evidence projection without raw source collections; and the historical BLAST Game 4 result through the bounded read flow and Service |
 | Real Provider validation | Bounded live samples measure League candidate coverage, source-field semantics, selected identities, and detail availability |
 | Full Agent acceptance | The model discovers a Match, selects a game, requests identity resolution, calls `game.detail` only after confirmation, and distinguishes missing fields from absent events |
 
@@ -916,6 +916,13 @@ Product-composed Runtime checks repeat resolution then request `game.detail`,
 assert unchanged public evidence/logical read counts, four remote source reads
 per historical one-League run, and fresh reads on the next run. These are offline
 transport counts, not measured live-provider latency improvements.
+
+Event-gated tests cover both list and detail phases at concurrency 1, 2 and 4,
+prove overlap and the configured peak without timing-based speed assertions,
+and compare complete matching results with serial execution. Multi-read failure
+and cancellation cases verify that queued reads stop, active siblings are joined,
+and structured errors are preserved. Full-phase budget prechecks still prevent
+any list/detail calls when that phase cannot fit.
 
 The historical-response integration test adds a separate adapter-backed offline
 layer. It loads the complete saved PandaScore Match `1743565`, OpenDota League

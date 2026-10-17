@@ -17,6 +17,7 @@ _RESOLUTION_ENV = (
     "DOTAMIND_GAME_RESOLUTION_MAX_LEAGUES",
     "DOTAMIND_GAME_RESOLUTION_MAX_CANDIDATE_DETAILS",
     "DOTAMIND_GAME_RESOLUTION_MAX_REQUESTS",
+    "DOTAMIND_GAME_RESOLUTION_MAX_CONCURRENCY",
     "DOTAMIND_OPENDOTA_ENABLED",
     "DOTAMIND_PANDASCORE_TOKEN",
 )
@@ -45,7 +46,8 @@ def test_game_resolution_defaults_are_disabled_and_have_finite_policy(
         policy.max_leagues,
         policy.max_candidate_details,
         policy.max_requests,
-    ) == (1800, 5, 20, 8, 30)
+        policy.max_concurrency,
+    ) == (1800, 5, 20, 8, 30, 4)
     services = build_vnext_services(settings)
     assert services.game_resolution is None
 
@@ -61,12 +63,14 @@ def test_dotenv_values_and_process_environment_override(
         "DOTAMIND_GAME_RESOLUTION_DURATION_TOLERANCE_SECONDS=4\n"
         "DOTAMIND_GAME_RESOLUTION_MAX_LEAGUES=5\n"
         "DOTAMIND_GAME_RESOLUTION_MAX_CANDIDATE_DETAILS=7\n"
-        "DOTAMIND_GAME_RESOLUTION_MAX_REQUESTS=12\n",
+        "DOTAMIND_GAME_RESOLUTION_MAX_REQUESTS=12\n"
+        "DOTAMIND_GAME_RESOLUTION_MAX_CONCURRENCY=2\n",
         encoding="utf-8",
     )
     _isolate(monkeypatch, env_path)
     monkeypatch.setenv("DOTAMIND_GAME_RESOLUTION_START_TOLERANCE_SECONDS", "0")
     monkeypatch.setenv("DOTAMIND_GAME_RESOLUTION_MAX_REQUESTS", "3")
+    monkeypatch.setenv("DOTAMIND_GAME_RESOLUTION_MAX_CONCURRENCY", "1")
 
     settings = VNextSettings.from_env()
 
@@ -76,6 +80,9 @@ def test_dotenv_values_and_process_environment_override(
     assert settings.game_resolution_read_policy.max_leagues == 5
     assert settings.game_resolution_read_policy.max_candidate_details == 7
     assert settings.game_resolution_read_policy.max_requests == 3
+    assert settings.game_resolution_read_policy.max_concurrency == 1
+    monkeypatch.delenv("DOTAMIND_GAME_RESOLUTION_MAX_CONCURRENCY")
+    assert VNextSettings.from_env().game_resolution_read_policy.max_concurrency == 2
 
 
 @pytest.mark.parametrize(
@@ -88,6 +95,8 @@ def test_dotenv_values_and_process_environment_override(
         ("DOTAMIND_GAME_RESOLUTION_MAX_LEAGUES", "0"),
         ("DOTAMIND_GAME_RESOLUTION_MAX_CANDIDATE_DETAILS", "-1"),
         ("DOTAMIND_GAME_RESOLUTION_MAX_REQUESTS", "NaN"),
+        ("DOTAMIND_GAME_RESOLUTION_MAX_CONCURRENCY", "0"),
+        ("DOTAMIND_GAME_RESOLUTION_MAX_CONCURRENCY", "1.5"),
     ],
 )
 def test_invalid_game_resolution_environment_values_name_the_setting(
