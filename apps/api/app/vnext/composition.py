@@ -156,9 +156,9 @@ def _default_game_resolution_read_policy() -> GameResolutionReadPolicy:
     return GameResolutionReadPolicy(
         start_time_tolerance_seconds=1800,
         duration_tolerance_seconds=5,
-        max_leagues=6,
+        max_leagues=20,
         max_candidate_details=8,
-        max_requests=16,
+        max_requests=30,
     )
 
 

@@ -45,7 +45,7 @@ def test_game_resolution_defaults_are_disabled_and_have_finite_policy(
         policy.max_leagues,
         policy.max_candidate_details,
         policy.max_requests,
-    ) == (1800, 5, 6, 8, 16)
+    ) == (1800, 5, 20, 8, 30)
     services = build_vnext_services(settings)
     assert services.game_resolution is None
 

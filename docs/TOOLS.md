@@ -730,7 +730,7 @@ Duplicate assignment and mapping reuse across separate tool calls, and
 whole-Match consistency, are therefore not guaranteed.
 
 The initial read policy defaults to 1,800 seconds start-time tolerance, 5 seconds
-duration tolerance, at most 6 League candidates, 8 candidate details, and 16
+duration tolerance, at most 20 League candidates, 8 candidate details, and 30
 total adapter requests. Configure it with
 `DOTAMIND_GAME_RESOLUTION_START_TOLERANCE_SECONDS`,
 `DOTAMIND_GAME_RESOLUTION_DURATION_TOLERANCE_SECONDS`,
