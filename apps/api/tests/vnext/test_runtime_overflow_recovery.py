@@ -244,8 +244,12 @@ def test_execution_overflow_compacts_and_retries_same_step() -> None:
     )
 
     assert result.content == "answer"  # type: ignore[union-attr]
-    business_requests = [request for request in model.requests if not request.metadata]
+    business_requests = [
+        request for request in model.requests
+        if request.metadata.get("purpose") != "context_compaction"
+    ]
     assert [request.step for request in business_requests] == [1, 1, 2]
+    assert all(request.metadata.get("request_time") is not None for request in business_requests)
     assert "compressed background" in str(business_requests[1].messages)
     assert [event.step for event in events if isinstance(event, ModelRequested)] == [1, 1, 2]
     snapshot = trace.snapshot()
@@ -463,9 +467,11 @@ def test_primary_answer_overflow_rebuilds_tool_free_request() -> None:
 
     assert result.content == "answer"  # type: ignore[union-attr]
     answer_requests = [
-        request for request in model.requests if not request.tools and not request.metadata
+        request for request in model.requests
+        if not request.tools and request.metadata.get("purpose") != "context_compaction"
     ]
     assert len(answer_requests) == 2
+    assert all(request.metadata.get("request_time") is not None for request in answer_requests)
     assert answer_requests[0].max_output_tokens == answer_requests[1].max_output_tokens
     assert "compressed background" in str(answer_requests[1].messages)
     assert trace.snapshot()["overflow_recoveries"] == [
