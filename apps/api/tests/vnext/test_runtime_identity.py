@@ -75,6 +75,9 @@ def _system_text(request: ModelRequest) -> str:
 
 def _assert_identity_once(request: ModelRequest) -> None:
     assert _system_text(request).count(PRODUCT_INSTRUCTION) == 1
+    assert 'status="resolved" means the program selected a' in _system_text(request)
+    assert "unique_candidate selects the sole candidate" in _system_text(request)
+    assert "do not describe incomplete checks as verified" in _system_text(request)
 
 
 def _message_text(request: ModelRequest) -> str:

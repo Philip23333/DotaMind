@@ -34,6 +34,7 @@ def _result(*, status: str = "resolved", data: dict[str, Any] | None = None):
         game_position=4,
         valve_game_id=9_040_578_015 if status == "resolved" else None,
         method="inferred_cross_source" if status == "resolved" else None,
+        selection_basis="verified_identity" if status == "resolved" else None,
         reason=None if status == "resolved" else "evidence_insufficient",
         providers=["pandascore", "opendota"],
         retrieved_at=datetime(2026, 10, 14, 8, 0, tzinfo=UTC),

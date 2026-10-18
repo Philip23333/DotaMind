@@ -13,6 +13,19 @@ from .candidates import GameCandidate, GameCandidateResult, find_game_candidates
 from .evidence import GameIdentityEvidence, compare_game_identity_evidence
 
 CandidateAssessmentStatus = Literal["accepted", "excluded", "unresolved"]
+SelectionBasis = Literal["verified_identity", "unique_candidate"]
+_IDENTITY_UNCERTAINTIES = frozenset(
+    {
+        "participant_name_missing",
+        "participant_name_not_comparable",
+        "participant_names_unaligned",
+        "participant_name_collision",
+        "game_winner_missing",
+        "game_winner_type_missing",
+        "winner_participants_unavailable",
+        "opendota_winner_missing",
+    }
+)
 ResolutionCategory = Literal[
     "resolved",
     "ambiguous",
@@ -68,6 +81,8 @@ class GameResolutionResult:
     candidate_assessments: tuple[CandidateAssessment, ...]
     unusable_record_count: int
     reason: str | None
+    selection_basis: SelectionBasis | None = None
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -111,6 +126,8 @@ class MultiLeagueGameResolutionResult:
     candidate_assessments: tuple[MultiLeagueCandidateAssessment, ...]
     league_search_diagnostics: tuple[LeagueSearchDiagnostic, ...]
     reason: str | None
+    selection_basis: SelectionBasis | None = None
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -133,8 +150,8 @@ def resolve_game(
     """Resolve one selected game using only caller-supplied source records.
 
     The initial time/duration filter is intentionally scoped to one supplied
-    League result. A candidate is accepted only when its detail remains in the
-    same window and participant plus winner evidence agree. No source is read,
+    League result. A sole candidate with usable detail timing may be selected
+    with identity warnings; contradictions still block selection. No source is read,
     no input is mutated, and no candidate is selected based on list order or a
     similarity score.
     """
@@ -181,6 +198,9 @@ def resolve_game(
 
     accepted = [item for item in assessments if item.status == "accepted"]
     unresolved = [item for item in assessments if item.status == "unresolved"]
+    unique_warnings = (
+        _uncertain_identity_reasons(assessments[0]) if len(assessments) == 1 else None
+    )
 
     if len(accepted) > 1:
         return _result(
@@ -193,7 +213,7 @@ def resolve_game(
             "multiple_candidates_accepted",
         )
 
-    if unresolved:
+    if unresolved and unique_warnings is None:
         return _result(
             initial,
             p_match_id,
@@ -206,7 +226,7 @@ def resolve_game(
             else "candidate_evidence_incomplete",
         )
 
-    if not accepted:
+    if not accepted and unique_warnings is None:
         return _result(
             initial,
             p_match_id,
@@ -228,10 +248,11 @@ def resolve_game(
             "pandascore_identity_missing",
         )
 
+    selected = assessments[0] if unique_warnings is not None else accepted[0]
     mapping_conflict = _find_mapping_conflict(
         confirmed_mappings,
         pandascore_game_id=p_game_id,
-        valve_game_id=accepted[0].candidate_valve_game_id,
+        valve_game_id=selected.candidate_valve_game_id,
     )
     if mapping_conflict is not None:
         return _result(
@@ -250,11 +271,13 @@ def resolve_game(
         pandascore_game_id=p_game_id,
         game_position=game_position,
         searched_league_id=initial.searched_league_id,
-        valve_game_id=accepted[0].candidate_valve_game_id,
+        valve_game_id=selected.candidate_valve_game_id,
         method="inferred_cross_source",
         candidate_assessments=assessments,
         unusable_record_count=initial.unusable_record_count,
         reason=None,
+        selection_basis="unique_candidate" if unique_warnings is not None else "verified_identity",
+        warnings=unique_warnings or (),
     )
 
 
@@ -398,6 +421,10 @@ def resolve_game_across_leagues(
 
     accepted = [item for item in merged_assessments if item.status == "accepted"]
     unresolved = [item for item in merged_assessments if item.status == "unresolved"]
+    unique_warnings = (
+        single_candidate_warnings(merged_assessments[0])
+        if len(merged_assessments) == 1 else None
+    )
 
     if len(accepted) > 1:
         return _multi_league_result(
@@ -412,7 +439,7 @@ def resolve_game_across_leagues(
             "ambiguous",
             "multiple_candidates_accepted",
         )
-    if unresolved:
+    if unresolved and unique_warnings is None:
         return _multi_league_result(
             target_probe,
             pandascore_match_id,
@@ -427,7 +454,7 @@ def resolve_game_across_leagues(
             if accepted
             else "candidate_evidence_incomplete",
         )
-    if not accepted:
+    if not accepted and unique_warnings is None:
         if merged_assessments:
             category: MultiLeagueResolutionCategory = "no_acceptable_candidate"
             reason = "all_candidates_excluded"
@@ -461,10 +488,11 @@ def resolve_game_across_leagues(
             "pandascore_identity_missing",
         )
 
+    selected = merged_assessments[0] if unique_warnings is not None else accepted[0]
     mapping_conflict = _find_mapping_conflict(
         confirmed_mappings,
         pandascore_game_id=pandascore_game_id,
-        valve_game_id=accepted[0].candidate_valve_game_id,
+        valve_game_id=selected.candidate_valve_game_id,
     )
     if mapping_conflict is not None:
         return _multi_league_result(
@@ -491,8 +519,10 @@ def resolve_game_across_leagues(
         diagnostics,
         "resolved",
         None,
-        valve_game_id=accepted[0].candidate_valve_game_id,
+        valve_game_id=selected.candidate_valve_game_id,
         method="inferred_cross_source",
+        selection_basis="unique_candidate" if unique_warnings is not None else "verified_identity",
+        warnings=unique_warnings or (),
     )
 
 
@@ -681,6 +711,42 @@ def _has_source_conflict(evidence: GameIdentityEvidence) -> bool:
     return any("source_conflict" in reason for reason in evidence.reasons)
 
 
+def _uncertain_identity_reasons(assessment: CandidateAssessment) -> tuple[str, ...] | None:
+    """Only incomplete identity evidence may be softened, never missing detail/timing."""
+
+    evidence = assessment.identity_evidence
+    if (
+        assessment.status != "unresolved"
+        or evidence is None
+        or assessment.detail_start_delta_seconds is None
+        or assessment.detail_duration_delta_seconds is None
+        or evidence.winner_status == "conflict"
+        or _has_source_conflict(evidence)
+        or not assessment.reasons
+        or not set(assessment.reasons).issubset(_IDENTITY_UNCERTAINTIES)
+    ):
+        return None
+    return assessment.reasons
+
+
+def single_candidate_warnings(
+    assessment: MultiLeagueCandidateAssessment,
+) -> tuple[str, ...] | None:
+    """Explain a sole selectable candidate without upgrading its evidence statuses."""
+
+    if assessment.status != "unresolved" or not assessment.league_assessments:
+        return None
+    reasons: list[str] = []
+    for scoped in assessment.league_assessments:
+        if scoped.assessment.status == "accepted":
+            continue
+        uncertain = _uncertain_identity_reasons(scoped.assessment)
+        if uncertain is None:
+            return None
+        reasons.extend(uncertain)
+    return tuple(dict.fromkeys(reasons)) or None
+
+
 def _positive_int(value: object) -> int | None:
     return value if type(value) is int and value > 0 else None
 
@@ -785,6 +851,8 @@ def _multi_league_result(
     *,
     valve_game_id: int | None = None,
     method: Literal["inferred_cross_source"] | None = None,
+    selection_basis: SelectionBasis | None = None,
+    warnings: tuple[str, ...] = (),
 ) -> MultiLeagueGameResolutionResult:
     return MultiLeagueGameResolutionResult(
         category=category,
@@ -798,6 +866,8 @@ def _multi_league_result(
         candidate_assessments=candidate_assessments,
         league_search_diagnostics=league_search_diagnostics,
         reason=reason,
+        selection_basis=selection_basis,
+        warnings=warnings,
     )
 
 

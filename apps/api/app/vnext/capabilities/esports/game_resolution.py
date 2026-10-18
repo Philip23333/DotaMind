@@ -27,6 +27,8 @@ from app.vnext.providers.match_resolution.request_flow import (
 )
 from app.vnext.providers.match_resolution.resolver import (
     MultiLeagueGameResolutionResult,
+    SelectionBasis,
+    single_candidate_warnings,
 )
 from app.vnext.tools.errors import StructuredToolError
 
@@ -125,6 +127,8 @@ class EsportsGameResolutionResult(BaseModel):
     game_position: _PositiveStrictInt
     valve_game_id: _PositiveStrictInt | None
     method: Literal["inferred_cross_source"] | None
+    selection_basis: SelectionBasis | None = None
+    warnings: list[StrictStr] = Field(default_factory=list)
     reason: ResolutionReason | None
     providers: list[ResolutionProviderId] = Field(min_length=1)
     retrieved_at: datetime
@@ -149,14 +153,25 @@ class EsportsGameResolutionResult(BaseModel):
     @model_validator(mode="after")
     def validate_status_fields(self) -> EsportsGameResolutionResult:
         if self.status == "resolved":
-            if self.valve_game_id is None or self.method is None or self.reason is not None:
-                raise ValueError("resolved results require an ID and method, without a reason")
+            if (
+                self.valve_game_id is None
+                or self.method is None
+                or self.reason is not None
+                or self.selection_basis is None
+            ):
+                raise ValueError("resolved results require an ID, method and selection basis")
+            if self.selection_basis == "unique_candidate" and not self.warnings:
+                raise ValueError("unique-candidate selection requires identity warnings")
+            if self.selection_basis == "verified_identity" and self.warnings:
+                raise ValueError("verified identity must not carry incomplete-identity warnings")
         elif (
             self.valve_game_id is not None
             or self.method is not None
             or self.reason is None
+            or self.selection_basis is not None
+            or self.warnings
         ):
-            raise ValueError("unresolved results require a reason and no confirmed identity")
+            raise ValueError("unresolved results require a reason and no selected identity")
         return self
 
 
@@ -205,6 +220,7 @@ class GameResolutionService:
 
         _validate_attempt_identity(attempt, match_id, game_position)
         status, valve_game_id, method, reason = _map_attempt(attempt)
+        resolution = attempt.resolution_result
         data = _serialize_resolution_evidence(attempt)
         providers = ["pandascore"]
         if attempt.opendota_leagues is not None:
@@ -216,6 +232,8 @@ class GameResolutionService:
                 game_position=game_position,
                 valve_game_id=valve_game_id,
                 method=method,
+                selection_basis=resolution.selection_basis if resolution is not None else None,
+                warnings=list(resolution.warnings) if resolution is not None else [],
                 reason=reason,
                 providers=providers,
                 retrieved_at=attempt.retrieved_at,
@@ -364,6 +382,29 @@ def _map_attempt(
             for item in result.candidate_assessments
             if item.status == "accepted"
         ]
+        if result.selection_basis == "verified_identity":
+            selection_valid = (
+                len(accepted_assessments) == 1
+                and accepted_assessments[0].candidate_valve_game_id == result.valve_game_id
+                and all(
+                    item.status in {"accepted", "excluded"}
+                    for item in result.candidate_assessments
+                )
+                and not result.warnings
+            )
+        elif result.selection_basis == "unique_candidate":
+            only = (
+                result.candidate_assessments[0] if len(result.candidate_assessments) == 1 else None
+            )
+            expected_warnings = single_candidate_warnings(only) if only is not None else None
+            selection_valid = (
+                only is not None
+                and only.candidate_valve_game_id == result.valve_game_id
+                and expected_warnings is not None
+                and result.warnings == expected_warnings
+            )
+        else:
+            selection_valid = False
         if (
             type(result.valve_game_id) is not int
             or result.valve_game_id <= 0
@@ -373,17 +414,18 @@ def _map_attempt(
             or result.pandascore_match_id != attempt.match_id
             or type(result.pandascore_game_id) is not int
             or result.pandascore_game_id <= 0
-            or len(accepted_assessments) != 1
-            or accepted_assessments[0].candidate_valve_game_id != result.valve_game_id
-            or any(
-                item.status not in {"accepted", "excluded"}
-                for item in result.candidate_assessments
-            )
+            or not selection_valid
         ):
             raise GameResolutionContractError("resolver returned an incomplete resolved identity")
         return "resolved", result.valve_game_id, result.method, None
 
-    if result.valve_game_id is not None or result.method is not None or result.reason is None:
+    if (
+        result.valve_game_id is not None
+        or result.method is not None
+        or result.reason is None
+        or result.selection_basis is not None
+        or result.warnings
+    ):
         raise GameResolutionContractError("resolver returned a contradictory unresolved result")
     return "unresolved", None, None, _reason(result.category)
 

@@ -169,8 +169,10 @@ For Larl's `20:00`, `25:00`, `30:00` samples, an illustrative target expression 
 $.data.players[?@.identity.account_id == 106305042].minute_timeline[?@.time_seconds == 1200 || @.time_seconds == 1500 || @.time_seconds == 1800]
 ```
 
-Request `time_seconds`, `time_label`, `net_worth`, `experience`, `last_hits` and
-`deaths` in `fields`. These are fields of the selected record; the query engine
+For the accepted next GameDetail schema, request `time_seconds`, `time_label`,
+`cumulative_gold_earned`, `cumulative_experience`, `last_hits`, and `known_deaths`
+in `fields`. Current stored baseline DTOs still use their original schema; the
+example does not migrate them. These are fields of the selected record; the query engine
 does not identify or add them automatically. The account predicate uses the
 player's actual `identity.account_id` path, not a top-level player member.
 Use conditions on source timestamps,
@@ -613,9 +615,10 @@ The resolver consumes the internal record directly. Both use the same adapter
 and client, but changing the public result no longer changes the resolver's
 record type. No extra HTTP read is introduced by the Service.
 
-**Output contract:** keep the input and match provenance envelope, then return
-the eight-section `data` DTO defined in
-[`agent/game_detail_data.md`](agent/game_detail_data.md). The OpenDota source
+**Output contract:** keep the input and the eight-section `data` structure in
+[`agent/game_detail_data.md`](agent/game_detail_data.md). The existing OpenDota
+implementation is the baseline; its accepted STRATZ-first replacement is
+described separately below. The OpenDota source
 identity is validated before projection. The result Artifact contains the
 complete governed DTO, with no raw-object field or model-facing way to retrieve
 the original response. Generic `artifact.read` and `artifact.grep` remain
@@ -637,8 +640,9 @@ field does not show that an event did not happen. The lookup does not request
 replay parsing. Large results continue to use generic Artifact externalization
 and narrower `artifact.read` paths. Deterministic coverage uses local HTTP
 mocks. The prior live cross-check for `8960882635` supports the ID mapping for
-that observed match only; this implementation has not yet been tested against
-live OpenDota.
+that observed match only. The later live `8960991322` comparison records selected
+source facts in the [STRATZ reference](reference/stratz-game-detail.md), not
+general provider coverage or acceptance of the replacement implementation.
 
 `esports.game.resolve` keeps complete candidate detail reads internal and exposes
 only resolution evidence in its Artifact. It cannot be used as a separate route
@@ -656,6 +660,36 @@ governed fields: `data.match.match_date` is the `Asia/Shanghai` calendar date,
 `data.match.score` contains Radiant/Dire hero-kill counts rather than series game
 wins, and `data.economy.radiant_gold_adv` must not be relabeled as net-worth
 difference. These semantics remain owned by the game-detail data contract.
+
+### Accepted detail source migration (not implemented)
+
+Keep one `game.detail(valve_game_id)` capability. Its Service selects STRATZ as
+primary and OpenDota supplemental data by the fixed table in the
+[owner contract](agent/game_detail_data.md), validates each source identity,
+reuses reads, and returns the governed DTO. The model is not asked to query other
+providers to fill these known groups. Current tool registration/configuration and
+its actual description remain unchanged until the implementation commits.
+
+The target tool description must explain:
+
+- `cumulative_gold_earned` is cumulative earned income, distinct from wallet and
+  net worth. `cumulative_experience` is cumulative experience. There is no minute
+  `net_worth`. Final `earned_gold_net_worth_gap` requires reliable same-final-time
+  inputs and is not pure death gold loss.
+- `known_deaths` counts only normalized, timed death facts. Final source death
+  count, unknown times, and missing event coverage remain separate.
+- Purchases, explicitly timed inventory snapshots, and timed ability upgrades
+  are separate build facts. Purchases do not reconstruct ownership/combination.
+- `provider` identifies the primary source; `sources`, coverage groups, and event
+  source paths identify actual provenance and limitations. Empty source lists
+  do not establish complete absence of game events.
+
+Explicit STRATZ Tormentor events and OpenDota whole-category Roshan/Aegis/building
+supplements follow the owner table. STRATZ gold reason `ROSHAN` is not a kill
+predicate. No ratings or inferred actors are added. Primary/root identity errors
+remain structured failures; ordinary supplement unavailability leaves dependent
+groups unknown with safe coverage, never fabricated empty facts. Generic Artifact
+tools and the existing esports identity resolver do not change responsibilities.
 
 `catalog.lookup(kind, ids)` resolves up to 20 exact positive hero or item IDs
 against the active local Valve Dota 2 catalog snapshot. It returns each requested
@@ -765,7 +799,9 @@ The implemented internal capability result is `EsportsGameResolutionResult`:
 |---|---|
 | `status` | `resolved` or `unresolved` |
 | `game_position` | The selected positive position |
-| `valve_game_id`, `method` | Present only for a confirmed cross-source identity |
+| `valve_game_id`, `method` | Present for a program-selected cross-source game; selection basis and warnings describe verification completeness |
+| `selection_basis` | `verified_identity` for completed participant/winner checks; `unique_candidate` for a sole selected candidate with incomplete identity checks; `null` when unresolved |
+| `warnings` | Nonempty uncertainty reason codes for `unique_candidate`; empty for verified or unresolved results; original evidence stays in `data` |
 | `reason` | Closed unresolved category; absent for a resolved identity |
 | `providers` | Sources whose reads returned successfully, in read order |
 | `retrieved_at` | Completion time of the internal read attempt, with timezone |
@@ -779,19 +815,29 @@ stable `tool_execution_error` with `budget_exhausted` details; it is not returne
 as an unresolved success. Provider structured errors and cancellation propagate.
 An invalid internal attempt raises a contract error.
 
-Only `status="resolved"` confirms `valve_game_id` as the selected Game's identity
-and makes it valid input to `game.detail`. For `status="unresolved"`, inspect the
+`status="resolved"` provides the program-selected `valve_game_id` for `game.detail`.
+It does not assert every identity check passed. Read `selection_basis`, `warnings`
+and the original evidence: incomplete participant/winner checks can accompany a
+sole time/duration candidate in a complete searched scope. When those already
+returned facts reasonably fit the request, continue to detail without another
+identity lookup or repeating resolution solely to clear warnings. Preserve
+material association uncertainty in conclusions. Nested assessment statuses
+describe checks, not the top-level selection outcome. Terminal complete words
+`esports`, `e-sports` and `gaming` may be ignored for participant matching; original
+names and `name_match_method` remain evidence. Explicit contradictions, multiple
+unresolved candidates, incomplete scope and read failures remain blocking.
+For `status="unresolved"`, inspect the
 reason and evidence; do not select a candidate ID yourself. The complete
-resolution evidence is saved in the returned Artifact. This tool confirms
-identity and may fetch candidate game details as evidence. It does not
+resolution evidence is saved in the returned Artifact. This tool selects a game
+with identity evidence and may fetch candidate details as evidence. It does not
 automatically invoke the `game.detail` tool. The Artifact retains selection
 results, timing differences, participant/winner comparisons, team-to-side
 associations, and unresolved reasons. It excludes the complete Match context,
 League catalog, League match lists, and candidate detail bodies. Selected
 Game/League source records already carried by matching evidence remain visible.
-Request game facts separately with `game.detail(valve_game_id)` after confirmation.
+Request game facts separately with `game.detail(valve_game_id)` after selection.
 
-The resolver confirms identity only:
+The resolver selects the game and retains its identity evidence:
 
 ```text
 esports.game.resolve → valve_game_id → model may call game.detail

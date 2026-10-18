@@ -134,8 +134,8 @@ additional reads and does not redo candidate selection, evidence comparison, or
 identity confirmation.
 
 The result has `status` (`resolved` or `unresolved`), the selected positive
-`game_position`, optional confirmed `valve_game_id` and
-`inferred_cross_source` method, a closed unresolved `reason`, the successfully
+`game_position`, optional program-selected `valve_game_id` and
+`inferred_cross_source` method, `selection_basis`, identity `warnings`, a closed unresolved `reason`, the successfully
 read source IDs in read order, the attempt completion `retrieved_at`, and `data`.
 `data` is an explicit projection of the existing offline results, not the whole
 internal `GameResolutionReadAttempt`. Its complete field set is:
@@ -150,7 +150,11 @@ internal `GameResolutionReadAttempt`. Its complete field set is:
 
 The projection preserves these nested results and their source facts without
 rerunning matching or inventing conclusions. Candidate IDs in evidence remain
-unconfirmed unless the top-level status is `resolved`. Provider-private IDs
+unselected unless the top-level status is `resolved`. Selection is distinct from
+complete identity verification: `selection_basis="verified_identity"` has no
+warnings; `selection_basis="unique_candidate"` requires nonempty uncertainty codes.
+Unresolved results have no ID, method or selection basis and have empty warnings.
+The nested resolution result retains the same basis and warnings. Provider-private IDs
 remain evidence, not new tool inputs. Top-level `retrieved_at` remains the
 attempt completion time and is not duplicated in `data`.
 
@@ -195,8 +199,9 @@ and cannot produce a resolved identity, even if an available League has one
 accepted candidate. League IDs are strict positive integers and duplicates are
 deduplicated in first-seen order.
 
-A unique result from time and duration alone is not sufficient to confirm
-identity. Candidate coverage and source failures remain scoped to the supplied
+A unique result from time and duration may select a game with identity warnings
+under the complete-scope rule below; it does not verify every identity check.
+Candidate coverage and source failures remain scoped to the supplied
 League result or the full selected multi-League scope; `no_candidates` means
 only that no row in that current scope met the supplied tolerances, not that the
 game does not exist.
@@ -231,8 +236,8 @@ range or exceed the caller's budget; the function does not infer a missing seaso
 
 ### Identity confirmation
 
-The current normal-window acceptance rule requires all of the following for a
-candidate:
+The normal-window identity-verification rule requires all of the following for a
+candidate; successful verification is published as `selection_basis="verified_identity"`:
 
 - the League row and detail identify the same Valve game;
 - detail start time and duration are inside the same explicit tolerances used
@@ -243,20 +248,51 @@ candidate:
   OpenDota `radiant_win` result; and
 - the evidence contains no source-field contradiction.
 
+Participant names first use Unicode NFKC, case folding and alphanumeric comparison.
+If the two sets differ, comparison may remove one terminal complete word from
+`esports`, `e-sports`, or `gaming`, ignoring case and terminal punctuation. A
+substring or a word in the middle is not removed. Empty cores and collisions
+between the two participants cannot establish an association. Academy, Junior,
+regional and other qualifiers are preserved. Associations retain both original
+names and `name_match_method` (`normalized_exact` or `common_suffix`); Provider
+team IDs are retained but never required to equal IDs from another Provider.
+
+If the complete selected scope contains exactly one distinct Valve candidate,
+its list and validated detail both meet the time/duration window, and it has no
+explicit contradiction or mapping conflict, incomplete participant/winner checks
+do not block selection. Return `resolved`, the ID, and
+`selection_basis="unique_candidate"`; `warnings` retains uncertainty reason codes
+and the evidence retains original names, source IDs, timing differences and
+winner facts. Allowed uncertainties are missing/uncomparable/unaligned/colliding
+participant names, missing winner/type, unavailable winner-participant association,
+or missing OpenDota winner. Missing detail/timing, out-of-window detail, explicit
+winner or source contradictions, and incomplete scope remain blocking. This rule
+does not choose one of several original candidates merely because others lack
+evidence; uniqueness is global across selected Leagues, after Valve-ID deduplication.
+
+The model reviews these already-returned facts to decide whether the selected
+game reasonably fits the request, then may continue to `game.detail` without a
+new identity lookup or repeated resolution solely to remove warnings. Material
+association uncertainty must remain visible in the answer. `resolved` is a
+selection outcome: a nested assessment may remain `unresolved` because its checks
+are incomplete; it does not override the successful top-level selection.
+
 All candidates across the complete selected scope are considered before
 returning a result. Two or more distinct accepted Valve IDs produce `ambiguous`.
 If the same Valve ID appears in multiple League lists, its per-League
 assessments are retained together and count as one candidate: all accepted
 assessments merge to accepted, all excluded assessments merge to excluded, and
-any unresolved assessment keeps the group unresolved. A mixture of accepted and
+any unresolved assessment keeps the evidence group unresolved. A mixture of accepted and
 excluded assessments for one Valve ID is also unresolved and records a
-cross-League assessment conflict. One accepted candidate with any unresolved
-competitor remains `evidence_insufficient`. A unique accepted candidate is
-`resolved` only when every other distinct candidate has an explicit exclusion
+cross-League assessment conflict and cannot use the single-candidate exception.
+One accepted candidate with any unresolved competitor remains `evidence_insufficient`.
+Outside the sole-candidate exception, selection requires one accepted candidate
+and every other distinct candidate to have an explicit exclusion
 reason, such as a detail outside the current window or a winner conflict after
 its participants were supported. Missing details, missing timing, missing
 participants or winner, unaligned names, and source conflicts remain unresolved;
-they are not treated as evidence against a candidate. If all candidates are
+they are not treated as evidence against a candidate. The sole-candidate rule
+can retain allowed identity uncertainties as warnings. If all candidates are
 explicitly excluded, the result is `no_acceptable_candidate`.
 
 Before returning `resolved`, the function checks the caller's confirmed
@@ -1136,13 +1172,14 @@ verification of this new client. The target projection and its source/missing
 rules are owned by [`agent/game_detail_data.md`](agent/game_detail_data.md);
 the public implementation returns that DTO rather than the full source object.
 
-The pure OpenDota projector and closed eight-section `GameDetailData` are
+The current pure OpenDota projector and closed eight-section `GameDetailData` are
 implemented and connected to the public Service. They include source-aligned
 minutes, final statistics, typed bilingual entities/units, normalized objective
 types, direct hero interactions, and scalar coverage evidence. The source fixture
 still contains excluded fields, so tests protect projection boundaries. The
-first-version scope is closed: competition remains null and final stats contain
-exactly ten fields. Unverified source semantics remain explicit unknowns.
+implemented baseline has competition null and ten final-stat fields. The accepted
+STRATZ-first target below changes mappings and selected fields; it is not yet
+implemented. Unverified source semantics remain explicit unknowns.
 
 The internal read and public result types are separate. The OpenDota adapter's
 `get_game_record(match_id)` validates source identity and known fields, then
@@ -1162,7 +1199,7 @@ The Service adds no provider requests, retries, cache, or fallback; structured
 errors and cancellation propagate unchanged. Product wiring shares one adapter
 and client between this Service and the resolver, not one public result type.
 
-### Game detail data projection (implemented; deterministic tool/Artifact checks passed)
+### Current game detail projection (OpenDota baseline; deterministic checks passed)
 
 The model-facing input remains `game.detail(valve_game_id)`. The outer
 `valve_game_id`, `provider`, and `retrieved_at` fields remain unique
@@ -1210,6 +1247,47 @@ The closed scope, source-semantic limits, and remaining implementation work are
 enumerated in the owner contract. This target
 does not select frontend rendering, an HTTP shape, persistent storage, replay
 parsing, or deployment changes.
+
+### Accepted STRATZ-first game detail governance (not implemented)
+
+The sole field/type/source owner is
+[`agent/game_detail_data.md`](agent/game_detail_data.md). It keeps the eight
+sections and canonical `valve_game_id`, but makes STRATZ the primary detail source.
+OpenDota supplies a fixed set of data groups/event categories inside the Service,
+not through model-operated fallback searches. Complete validated source records
+stay internal. This does not replace the resolver's OpenDota read/evidence path.
+
+- Remove minute `net_worth`. Every public `gold_t` value becomes
+  `cumulative_gold_earned`; cumulative experience becomes `cumulative_experience`.
+  Initial income and unverified STRATZ minute mappings use the explicit OpenDota
+  supplemental groups. STRATZ GPM/gold-event sums do not establish total income.
+- Replace final `net_worth` with `earned_gold_net_worth_gap` (累计金币与净值差),
+  requiring reliable inputs at the same final instant. Otherwise null with
+  coverage; do not subtract the last minute from final net worth or call the
+  difference pure death loss. No minute replacement gap is added.
+- Construct `events.hero_deaths` once from verified source facts; retain known
+  time and supported unknown-time rows. `known_deaths` counts only located events
+  through each minute, while final `deaths` stays the source total. Aggregates do
+  not fabricate individual deaths. The STRATZ DEATH-gold association remains a
+  candidate rule requiring additional samples, not a raw-list filter.
+- STRATZ explicit Tormentor messages are usable; initial Roshan/Aegis/concrete
+  building groups use OpenDota explicit objectives. A `ROSHAN` gold reason also
+  appears at Tormentor times in the sample and is not a Roshan-kill predicate.
+- Timed STRATZ inventory observations and ability upgrades stay under `builds`,
+  separate from purchases and player minute nodes; no recipe/inventory inference.
+- Outer `provider` means primary source; `sources` records successful reads and
+  their own times. Coverage groups and event `source_paths` attribute facts to
+  the real source. Partial death coverage, mapping gaps, and conflicts cannot
+  erase usable economic/experience statistics.
+
+Primary source/root identity failures are structured errors. Ordinary supplement
+unavailability affects only dependent groups with explicit coverage; it is never
+an empty list or silent whole-provider failover. Existing cancellation, local
+resource, storage, and programming-error behavior remains intact. See the owner
+for the exact failure policy, namespace validation, and implementation gates.
+The [source reference](reference/stratz-game-detail.md) records live comparison
+facts for `8960991322`; it does not certify the unwritten projection or general
+coverage. Current registration flags and implementation remain unchanged.
 
 ## Account-to-game evidence and local catalog labels
 

@@ -122,6 +122,8 @@ def test_one_accepted_candidate_and_an_explicitly_empty_scope_resolve() -> None:
 
     assert result.category == "resolved"
     assert result.valve_game_id == valve_id
+    assert result.selection_basis == "verified_identity"
+    assert result.warnings == ()
     assert result.searched_league_ids == (101, 202)
     assert result.missing_league_ids == ()
     diagnostics = [
@@ -132,6 +134,75 @@ def test_one_accepted_candidate_and_an_explicitly_empty_scope_resolve() -> None:
         (101, 0),
         (202, 0),
     ]
+
+
+def test_one_global_candidate_with_unaligned_names_is_selected_without_upgrading_evidence() -> None:
+    valve_id = 9040000001
+    result = _resolve(
+        _context(_game()), [101, 202],
+        {101: [_row(valve_id)], 202: [_row(valve_id)]},
+        {valve_id: _detail(valve_id, dire_name="Other source name")},
+    )
+    assert result.category == "resolved"
+    assert result.valve_game_id == valve_id
+    assert result.selection_basis == "unique_candidate"
+    assert result.warnings == ("participant_names_unaligned", "winner_participants_unavailable")
+    assert len(result.candidate_assessments) == 1
+    merged = result.candidate_assessments[0]
+    assert merged.status == "unresolved"  # Evidence remains uncertain; selection succeeded.
+    assert len(merged.league_assessments) == 2
+    assert all(a.assessment.identity_evidence.participants_status == "unknown"
+               for a in merged.league_assessments)
+
+
+def test_each_league_having_one_uncertain_candidate_does_not_make_global_identity_unique() -> None:
+    first, second = 9040000001, 9040000002
+    result = _resolve(
+        _context(_game()), [101, 202],
+        {101: [_row(first)], 202: [_row(second)]},
+        {first: _detail(first, dire_name="Unknown"), second: _detail(second, dire_name="Unknown")},
+    )
+    assert result.category == "evidence_insufficient"
+    assert result.valve_game_id is None
+    assert result.selection_basis is None
+    assert result.warnings == ()
+
+
+@pytest.mark.parametrize("case", [
+    "missing_scope", "missing_detail", "missing_time", "outside_time", "winner_conflict",
+    "source_conflict", "winner_not_participant_with_unaligned_names", "mapping_conflict",
+])
+def test_unique_candidate_never_softens_hard_failures(case: str) -> None:
+    valve_id = 9040000001
+    context = _context(_game())
+    lists = {101: [_row(valve_id)], 202: []}
+    details = {valve_id: _detail(valve_id)}
+    mappings = {}
+    if case == "missing_scope":
+        lists.pop(202)
+        details[valve_id]["dire_team"] = None
+    elif case == "missing_detail":
+        details.clear()
+    elif case == "missing_time":
+        details[valve_id].pop("start_time")
+    elif case == "outside_time":
+        details[valve_id]["start_time"] = _epoch(61)
+    elif case == "winner_conflict":
+        details[valve_id]["radiant_win"] = False
+    elif case == "source_conflict":
+        context["games"][0]["winner_id"] = 20
+    elif case == "winner_not_participant_with_unaligned_names":
+        context["games"][0]["winner"] = {"id": 999, "type": "Team"}
+        context["games"][0]["winner_id"] = 999
+        details[valve_id]["dire_team"] = {"name": "Unaligned"}
+    else:
+        details[valve_id]["dire_team"] = None
+        mappings[2001] = valve_id
+    result = _resolve(context, [101, 202], lists, details, mappings=mappings)
+    assert result.category != "resolved"
+    assert result.valve_game_id is None
+    assert result.selection_basis is None
+    assert result.warnings == ()
 
 
 def test_distinct_accepted_valve_ids_across_leagues_are_ambiguous() -> None:

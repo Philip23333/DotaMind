@@ -24,16 +24,28 @@ position (for example, 4 selects position 4). These values are independent. The
 path is relative to the stored document even when the inline observation nests
 the results under value, so pass items.0 without a value. prefix.
 
-Only status="resolved" confirms the returned valve_game_id as this Game's
-identity; that Valve ID can be passed to game.detail. An unresolved result is
-not a confirmed identity: inspect its reason and evidence, and do not choose an
-ID from candidate evidence yourself. This tool confirms identity and may fetch
+status="resolved" returns the program-selected valve_game_id for use with
+game.detail. Read selection_basis: verified_identity means participant and winner
+checks passed; unique_candidate means the complete searched scope has exactly one
+time/duration candidate with valid detail but incomplete identity checks. In that
+case, warnings lists the uncertainty codes and data retains original names,
+timing differences and evidence. Review these returned facts and, when reasonably
+consistent, continue to game.detail without repeating resolution or adding a new
+identity lookup just to clear warnings. Do not treat warnings as automatic data
+unavailability or claim every identity check passed. Common terminal esports,
+e-sports and gaming words may be ignored for name matching; the association
+records name_match_method and original names. Explicit contradictions, incomplete
+search scope, and read failures still block selection.
+Nested candidate assessment statuses describe checks, not the selection outcome.
+
+An unresolved result has no selected identity: inspect its reason and evidence,
+and do not choose an ID from candidate evidence yourself. This tool may fetch
 candidate game details as evidence. It does not automatically invoke the
 game.detail tool. The returned Artifact stores target selection, League
 selection, candidate assessments, timing differences, participant associations,
 winner comparisons, and unresolved reasons. Raw Match context, full League
 collections and match lists, and candidate game details are internal reads and
-are not stored in this result. Use game.detail with the confirmed valve_game_id
+are not stored in this result. Use game.detail with the selected valve_game_id
 to retrieve game facts.
 
 Confirmed mappings are not retained across separate calls, so this tool does

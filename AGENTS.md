@@ -178,6 +178,16 @@ generic Artifact handling + bounded observation
 
 The current `game.detail` output is the explicit eight-section DTO owned by [`docs/agent/game_detail_data.md`](docs/agent/game_detail_data.md), with local bilingual entity/unit names and version provenance. Complete OpenDota source records remain internal to validation and identity resolution.
 
+The accepted next detail implementation uses STRATZ as primary and fixed
+OpenDota supplemental groups inside `GameDetailService`, as defined by that
+owner contract. This is a documented target, not the current provider switch.
+Do not move provider choice to the model or Runtime, build a routing framework,
+or replace the resolver's internal OpenDota/evidence boundary. Validate each
+source's Valve identity and namespaces, attribute mixed-source facts explicitly,
+and pass the documented death/time/income semantic gates before exposing them.
+Minute net worth is removed in the target; cumulative earned income and final
+earned-income/net-worth difference must keep their distinct source semantics.
+
 Esports discovery is currently being redesigned as a PandaScore-oriented agent
 tool seam; the previous unified `esports.search` capability (tool, service,
 provider, search models, and its contract tests) was removed so the new design
@@ -264,6 +274,17 @@ internal-source/public-evidence boundary: complete candidate details stay
 available to its matcher, while its result Artifact stores only the resolution
 evidence defined in `docs/DATA.md`, without raw source collections or a retrieval
 handle for candidate details.
+
+`esports.game.resolve` uses `resolved` for a program-selected Valve ID, with
+`selection_basis` and `warnings` distinguishing completed identity checks from
+sole-candidate selection with incomplete participant/winner evidence. The latter
+requires a complete selected scope, valid in-window source detail and no explicit
+contradiction. Name comparison may ignore terminal whole-word `esports`,
+`e-sports` and `gaming`; preserve originals and matching method. Keep uncertainties
+visible without forcing a new identity lookup. A model may continue to
+`game.detail` for a selected ID after reviewing existing evidence, but must not
+choose an ID from an unresolved result. Owner contracts are in `docs/DATA.md`
+and `docs/TOOLS.md`; keep shared stage instructions consistent with both.
 
 A second provider may justify a shared Provider protocol/router later. One
 provider alone does not justify speculative provider-selection machinery; the

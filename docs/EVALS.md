@@ -147,10 +147,17 @@ These are offline mechanical checks; the controlled real-model comparison remain
 pending. Additional acceptance expectations are detailed below; do not infer that
 every proposed experiment has run merely because the tool is registered.
 
-The same-game selection regression uses Valve game `9040460429`, account
+The existing baseline fixture regression uses Valve game `9040460429`, account
 `106305042` (Larl). Filter on `players[].identity.account_id` and the exact
 `minute_timeline[].time_seconds`, not adjacent
 array positions. Verify these source-backed rows and their original read paths:
+
+These are current fixture field names, not the accepted next DTO. The migration
+must update projection fixtures and queries together; historical Artifacts keep
+their schema. Target minute rows omit net worth, rename `earned_gold/experience`
+to `cumulative_gold_earned/cumulative_experience`, and use `known_deaths` for
+located event counts. Keep the income/XP values below without substituting the
+neighboring sample.
 
 | `time_seconds` | `time_label` | `net_worth` | `earned_gold` | `experience` | `last_hits` | `deaths` |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -652,21 +659,24 @@ the returned sample. This is one-account evidence, not a universal guarantee.
 `player.profile` and `player.recent_games` register with a STRATZ token;
 `game.detail` registers only when OpenDota is explicitly enabled.
 `game.detail` is covered by deterministic OpenDota MockTransport tests and is
-opt-in at composition; no live OpenDota request was made for this
-implementation. The earlier cross-source ID observation is limited to
-`8960882635`. Later live or fixture-backed
+opt-in at composition. A later manual comparison of `8960991322` used live
+source reads; [the reference](reference/stratz-game-detail.md) records that sample,
+separate from automated tests and replacement-projector acceptance. The earlier
+cross-source ID observation is limited to `8960882635`. Later live or fixture-backed
 cross-source evaluation must verify any proposed relationship between a
 Steam32 account and a PandaScore professional player from explicit evidence;
 the shared appearance of a player or event is not sufficient. These tests do
 not establish general current STRATZ availability or every source business
 meaning.
 
-### Game detail eight-section projection (implemented; deterministic boundary checks passed)
+### Current OpenDota eight-section projection (baseline deterministic checks passed)
 
-The owner contract is
+The accepted target owner contract is
 [`agent/game_detail_data.md`](agent/game_detail_data.md). The adapter retains
 complete source records internally; the public Service now returns the governed
-DTO with bilingual entity/unit labels and version provenance. Offline tests cover the
+DTO with bilingual entity/unit labels and version provenance. The following
+checks describe the current OpenDota schema, not the new STRATZ-first target.
+Offline tests cover the
 closed eight-section model, static mappings, strict enums, final statistics,
 slot-preserving loadouts, purchase/skill/neutral history, source identity, and
 missing versus explicit empty collections using saved game `9040460429`.
@@ -858,6 +868,53 @@ heuristic input measure rather than a precise token count. The stage status and
 known limitations are maintained in
 [`agent/context_governance_evidence_lifecycle.md`](agent/context_governance_evidence_lifecycle.md).
 
+### STRATZ-first detail governance acceptance (planned; not run)
+
+Source observations for game `8960991322` are documented in
+[`reference/stratz-game-detail.md`](reference/stratz-game-detail.md). They are
+manual evidence for the design; they do not mean these implementation checks pass.
+Follow the [owner contract](agent/game_detail_data.md) and verify:
+
+- Public input and resolver evidence boundaries remain unchanged. Validate each
+  provider's exact Valve ID, same-game player associations, source timestamps,
+  and provider NPC/hero/slot namespaces. No raw bodies or alternate detail handle
+  enter the Artifact; generic tools read the complete governed target DTO.
+- Remove minute `net_worth` and the old `earned_gold/experience/deaths` minute
+  fields. Exact-time income/XP/farming values survive under their target names.
+  Final source `deaths` survives. Final gap is null without reliable same-instant
+  cumulative-income/net-worth inputs; no last-minute or GPM approximation.
+- Each STRATZ series validates its own point/interval axis. Reject a universal
+  64/65/66-element shift, length-based matching, and implicit final samples.
+  Recheck the 640 sample XP prefix sums, then test other real cases before use.
+- Normalize deaths once. For the sample, assess the candidate 65 DEATH-gold
+  facts against final per-player counts; do not count 422 raw death entries.
+  Additional real games must cover zero loss, non-hero killers, reincarnation,
+  summons/illusions, same-second ambiguity, absent/partial logs, and unknown
+  times. Do not turn aggregates or final-count residuals into synthetic events.
+  Verify `known_deaths`, death coverage counts, and nonduplicated kill relations.
+- Sample Tormentor times are 1982/2839; Roshan times are 1795/2452/3038 from
+  OpenDota, not five STRATZ `ROSHAN` gold timestamps. Aegis/building categories
+  follow the fixed supplemental table. Null attacker is not fountain; unverified
+  chat payloads do not assign a killer or reward. First-blood 56/79 remains a
+  source conflict.
+- Timed inventory comes from explicit `inventoryEvents`, not untimed
+  `inventoryReport` positions or purchases. Preserve slots and nullable charges;
+  retain component/completed purchases without inferred recipes. Validate timed
+  ability fields. Do not report zero sampled buyback cost as a verified expense.
+- `sources`, group coverage, event paths, and conflict provider/path/value arrays
+  agree. Incomplete categories do not invalidate available economy/experience.
+  Empty source responses do not establish complete absence of game events.
+- Primary/root identity errors fail; ordinary supplement unavailability leaves
+  only its dependent groups unknown. Test timeout, rate limit, not-found, malformed
+  root, cancellation, and local resource/storage errors without hidden failover.
+  Source reads reuse the existing request scope, not one fetch per group.
+
+After deterministic boundaries pass, run a live fixed-selection smoke test and
+real-model questions about 20/25-minute income, terminal statistics, one death,
+and Roshan/Tormentor counts. Distinguish wrong field selection, incorrect copying,
+and arithmetic errors. Existing fixture/model results cannot stand in for this
+new-provider acceptance.
+
 ### Esports Match-to-OpenDota game resolution (offline core and opt-in tool implemented; live Provider and Agent acceptance pending)
 
 The current PandaScore esports capabilities and `game.detail` exist. Provider-
@@ -875,7 +932,7 @@ layers:
 |---|---|
 | Deterministic tests | League brand/season/year candidates and explicit limits; dependent Match/League reads and bounded concurrent list/detail phases; phase-wide request and record-budget prechecks; duplicate League and Valve IDs; provider-error classification and cancellation; internal complete source-record retention; global decisions across selected League scopes; absent versus explicitly empty lists; per-League assessment merging; detail-ID validation; same-window detail recheck; participant/winner evidence; competing candidates; mapping conflicts; input immutability; capability result invariants and closed reasons; one Provider call with unchanged inputs; stable budget-error mapping; unchanged Provider errors/cancellation; public evidence projection without raw source collections; and the historical BLAST Game 4 result through the bounded read flow and Service |
 | Real Provider validation | Bounded live samples measure League candidate coverage, source-field semantics, selected identities, and detail availability |
-| Full Agent acceptance | The model discovers a Match, selects a game, requests identity resolution, calls `game.detail` only after confirmation, and distinguishes missing fields from absent events |
+| Full Agent acceptance | The model discovers a Match, selects a game, requests resolution, reviews existing selection evidence/warnings, calls `game.detail` for the selected ID without another identity lookup solely to clear warnings, and preserves association uncertainty and missing-data semantics |
 
 The offline suite uses saved historical response fields for the BLAST Game 4
 candidate and participant/winner facts; Yakult Games 1 and 2, including their
@@ -923,6 +980,21 @@ and compare complete matching results with serial execution. Multi-read failure
 and cancellation cases verify that queued reads stop, active siblings are joined,
 and structured errors are preserved. Full-phase budget prechecks still prevent
 any list/detail calls when that phase cannot fit.
+
+Selection tests distinguish verified identity from a sole candidate with incomplete
+participant/winner evidence. They cover whole-word terminal suffix compatibility,
+original names/matching method, empty/colliding name cores, global uniqueness
+across Leagues, preserved unknown evidence/warnings, and blocking detail/timing,
+source/winner contradictions, mapping conflicts and missing scope. Service checks
+reject inconsistent selection bases, suppressed warnings and extra candidates.
+The `epl_final_1606806_identity.json` fixture reconstructs identity/timing fields
+from trace `20e0052f-7ced-47b5-944b-227b40ae8243`; it is not a full raw Provider
+snapshot. Real adapters and tool/Artifact boundaries replay all three IDs through
+suffix matching to `game.detail`; a separately labeled synthetic name fault checks
+sole-candidate warning selection and continuation. Both preserve the governed DTO
+boundary and source-read reuse. Shared-product instruction tests cover execution,
+primary/rebuilt and degraded answers without claiming real-model continuation
+rates. Missing identity checks must not be relabeled as verified.
 
 The historical-response integration test adds a separate adapter-backed offline
 layer. It loads the complete saved PandaScore Match `1743565`, OpenDota League

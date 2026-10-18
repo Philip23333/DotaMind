@@ -150,7 +150,7 @@ def test_unique_candidate_with_supported_participants_and_winner_resolves() -> N
     assert assessment.identity_evidence.winner_status == "consistent"
 
 
-def test_time_and_duration_alone_do_not_confirm_identity() -> None:
+def test_unique_candidate_with_unaligned_names_is_selected_with_warnings() -> None:
     candidate_id = 9040000001
     context = _context(_game(), radiant_name="Alpha", dire_name="Beta")
     detail = _detail(
@@ -161,13 +161,15 @@ def test_time_and_duration_alone_do_not_confirm_identity() -> None:
 
     result = _resolve(context, [_row(candidate_id)], {candidate_id: detail})
 
-    assert result.category == "evidence_insufficient"
-    assert result.valve_game_id is None
+    assert result.category == "resolved"
+    assert result.valve_game_id == candidate_id
+    assert result.selection_basis == "unique_candidate"
+    assert "participant_names_unaligned" in result.warnings
     assert result.candidate_assessments[0].status == "unresolved"
     assert result.candidate_assessments[0].identity_evidence is not None
 
 
-def test_unknown_winner_keeps_candidate_unresolved() -> None:
+def test_unknown_winner_is_preserved_when_selecting_unique_candidate() -> None:
     candidate_id = 9040000001
     context = _context(_game(winner_id=None))
 
@@ -177,9 +179,11 @@ def test_unknown_winner_keeps_candidate_unresolved() -> None:
         {candidate_id: _detail(candidate_id)},
     )
 
-    assert result.category == "evidence_insufficient"
-    assert result.reason == "candidate_evidence_incomplete"
-    assert result.valve_game_id is None
+    assert result.category == "resolved"
+    assert result.reason is None
+    assert result.valve_game_id == candidate_id
+    assert result.selection_basis == "unique_candidate"
+    assert result.warnings == ("game_winner_missing",)
     assert result.candidate_assessments[0].identity_evidence.winner_status == "unknown"
     assert "game_winner_missing" in result.candidate_assessments[0].reasons
 
@@ -526,7 +530,7 @@ def test_yakult_historical_samples_resolve_with_real_timing() -> None:
         assert result.candidate_assessments[0].identity_evidence.winner_status == "consistent"
 
 
-def test_old_blood_missing_dire_and_south_america_outside_window_stay_unresolved() -> None:
+def test_missing_dire_is_a_selection_warning_but_outside_window_remains_unresolved() -> None:
     old_blood_id = 9041812996
     context = _context(
         _game(
@@ -563,8 +567,10 @@ def test_old_blood_missing_dire_and_south_america_outside_window_stay_unresolved
         {old_blood_id: old_blood_detail},
         position=2,
     )
-    assert old_blood_result.category == "evidence_insufficient"
-    assert old_blood_result.valve_game_id is None
+    assert old_blood_result.category == "resolved"
+    assert old_blood_result.valve_game_id == old_blood_id
+    assert old_blood_result.selection_basis == "unique_candidate"
+    assert "participant_name_missing" in old_blood_result.warnings
     old_blood_evidence = old_blood_result.candidate_assessments[0].identity_evidence
     assert old_blood_evidence.participants_status == "unknown"
 

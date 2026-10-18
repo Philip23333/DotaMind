@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ Side = Literal["radiant", "dire"]
 EvidenceStatus = Literal["supported", "unknown"]
 WinnerStatus = Literal["consistent", "conflict", "unknown"]
 _MISSING = object()
+_COMMON_TEAM_SUFFIX = re.compile(r"(?:^|[\W_]+)(?:esports|e-sports|gaming)[\W_]*$")
 
 
 @dataclass(frozen=True)
@@ -38,6 +40,7 @@ class ParticipantAssociation:
     opendota_team_id: int | None
     pandascore_name: str
     opendota_name: str
+    name_match_method: Literal["normalized_exact", "common_suffix"] = "normalized_exact"
 
 
 @dataclass(frozen=True)
@@ -293,14 +296,25 @@ def _compare_participants(
         _add_reason(reasons, "participant_name_collision")
         return "unknown", []
 
+    matching_names = pscore_names, opendota_names
     if set(pscore_names) != set(opendota_names):
-        _add_reason(reasons, "participant_names_unaligned")
-        return "unknown", []
+        pscore_keys = [_without_common_suffix(item.name) for item in pandascore]
+        opendota_keys = [_without_common_suffix(item.name) for item in opendota]
+        if not all((*pscore_keys, *opendota_keys)):
+            _add_reason(reasons, "participant_names_unaligned")
+            return "unknown", []
+        if len(set(pscore_keys)) != 2 or len(set(opendota_keys)) != 2:
+            _add_reason(reasons, "participant_name_collision")
+            return "unknown", []
+        if set(pscore_keys) != set(opendota_keys):
+            _add_reason(reasons, "participant_names_unaligned")
+            return "unknown", []
+        matching_names = pscore_keys, opendota_keys
 
-    opendota_by_name = {item.normalized_name: item for item in opendota}
+    opendota_by_name = dict(zip(matching_names[1], opendota, strict=True))
     associations: list[ParticipantAssociation] = []
-    for team in pandascore:
-        counterpart = opendota_by_name[team.normalized_name]
+    for key, team in zip(matching_names[0], pandascore, strict=True):
+        counterpart = opendota_by_name[key]
         associations.append(
             ParticipantAssociation(
                 pandascore_team_id=_positive_int(team.team_id),
@@ -308,6 +322,11 @@ def _compare_participants(
                 opendota_team_id=_positive_int(counterpart.team_id),
                 pandascore_name=team.name,  # type: ignore[arg-type]
                 opendota_name=counterpart.name,  # type: ignore[arg-type]
+                name_match_method=(
+                    "normalized_exact"
+                    if team.normalized_name == counterpart.normalized_name
+                    else "common_suffix"
+                ),
             )
         )
     return "supported", associations
@@ -360,20 +379,26 @@ def _compare_winner(
         _add_reason(reasons, "game_winner_not_team")
         return "unknown"
 
-    if participants_status != "supported":
-        _add_reason(reasons, "winner_participants_unavailable")
-        return "unknown"
-
     source_participants = [
         participant
         for participant in pandascore_participants
         if _positive_int(participant.team_id) == winner_id
     ]
     if not source_participants:
-        _add_reason(reasons, "game_winner_not_in_participants")
+        _add_reason(
+            reasons,
+            "winner_participants_unavailable"
+            if len(pandascore_participants) != 2
+            or any(_positive_int(item.team_id) is None for item in pandascore_participants)
+            else "game_winner_not_in_participants",
+        )
         return "unknown"
     if len(source_participants) > 1:
         _add_reason(reasons, "game_winner_participant_ambiguous")
+        return "unknown"
+
+    if participants_status != "supported":
+        _add_reason(reasons, "winner_participants_unavailable")
         return "unknown"
 
     if not radiant_win_present or type(radiant_win) is not bool:
@@ -398,6 +423,13 @@ def _compare_winner(
 def _normalize_name(name: str) -> str:
     normalized = unicodedata.normalize("NFKC", name).casefold()
     return "".join(character for character in normalized if character.isalnum())
+
+
+def _without_common_suffix(name: JsonValue | None) -> str | None:
+    if not isinstance(name, str):
+        return None
+    normalized = unicodedata.normalize("NFKC", name).casefold().strip()
+    return _normalize_name(_COMMON_TEAM_SUFFIX.sub("", normalized)) or None
 
 
 def _positive_int(value: JsonValue | None) -> int | None:

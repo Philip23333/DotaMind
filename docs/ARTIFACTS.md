@@ -355,15 +355,16 @@ policy remains in [TOOLS.md](TOOLS.md).
 
 ### Complete example
 
-The following uses the governed sample for Valve game `9040460429`, Larl at
-25:00. Replace the placeholder with a real previously returned reference. This
-illustrates the accepted target, not a successful current `artifact.query` call.
+The following uses saved facts for Valve game `9040460429`, Larl at 25:00, with
+the accepted next GameDetail field names. Replace the placeholder with a real
+reference whose document has that schema. This is an illustrative target:
+existing Artifacts retain their original fields and are not migrated by query.
 
 ```json
 {
   "ref": "<existing artifact_ref>",
   "expression": "$.data.players[?@.identity.account_id == 106305042].minute_timeline[?@.time_seconds == 1500]",
-  "fields": ["time_seconds", "time_label", "net_worth", "deaths"],
+  "fields": ["time_seconds", "time_label", "cumulative_gold_earned", "known_deaths"],
   "offset": 0,
   "limit": 20
 }
@@ -373,15 +374,15 @@ illustrates the accepted target, not a successful current `artifact.query` call.
 {
   "ref": "<existing artifact_ref>",
   "expression": "$.data.players[?@.identity.account_id == 106305042].minute_timeline[?@.time_seconds == 1500]",
-  "fields": ["time_seconds", "time_label", "net_worth", "deaths"],
+  "fields": ["time_seconds", "time_label", "cumulative_gold_earned", "known_deaths"],
   "matches": [
     {
       "path": "data.players.2.minute_timeline.25",
       "value": {
         "time_seconds": 1500,
         "time_label": "25:00",
-        "net_worth": 10730,
-        "deaths": 2
+        "cumulative_gold_earned": 10840,
+        "known_deaths": 2
       },
       "missing_fields": []
     }

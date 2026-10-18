@@ -103,7 +103,7 @@ The model-facing contract never exposes wire routes, credentials, pagination
 syntax, or transport-private IDs. A single provider does not justify a router or
 plugin framework.
 
-### Game-detail data governance (implemented; deterministic boundary checks passed)
+### Game-detail data governance (current OpenDota baseline; target migration pending)
 
 The current `game.detail` output is the explicit eight-section DTO in
 [`agent/game_detail_data.md`](agent/game_detail_data.md). Source identity
@@ -147,6 +147,24 @@ source collections. This capability-owned boundary leaves the offline matcher,
 Provider reads, Runtime, and generic Artifact mechanics unchanged. The evidence
 schema is part of the cross-source contract in
 [`DATA.md`](DATA.md).
+
+The accepted STRATZ-first target keeps this capability boundary: the Service
+coordinates a fixed STRATZ primary read and reusable OpenDota supplemental groups,
+then projects the governed DTO with source-specific provenance. It does not add
+provider selection to Runtime, generic Artifact tools, or the model. Each source
+validates the requested Valve identity; same-game player associations and ID
+namespaces must be verified before facts are combined. Successful source reads
+are attributed separately; ordinary supplement unavailability affects only its
+groups, while identity/root failures retain structured errors. There is no silent
+whole-provider failover or dynamic routing framework.
+
+The economic renames, normalized death facts, timed build observations, and
+multi-source envelope are accepted but unimplemented. Additional STRATZ semantic
+gates are owned by [the data contract](agent/game_detail_data.md); live source
+facts are in [the STRATZ reference](reference/stratz-game-detail.md). The existing
+OpenDota internal-record/resolver split and request-source reuse must survive
+this migration. No frontend, replay parser, background index, or new storage
+subsystem is required by this decision.
 
 The optional web-search integration is initialized asynchronously in the API
 lifespan before Runtime construction. Synchronous/offline composition performs
@@ -769,7 +787,7 @@ Model
           → filter candidates for the selected PandaScore Game
           → read a small number of candidate details only when evidence is needed
           → compare selected-game evidence and any supplied mapping constraints
-      → confirmed valve_game_id or an explicit unresolved result
+      → selected valve_game_id, selection basis and warnings, or an explicit unresolved result
   → model may call game.detail(valve_game_id)
       → existing OpenDota game-detail capability
       → generic Artifact handling
@@ -777,7 +795,13 @@ Model
 
 The resolution target is one game; its parent Match provides context. More than
 one League or match candidate may remain after initial filtering, so the Service
-must not choose one merely because it is first or currently unique. Candidate
+must not choose one merely because it is first or unique before completing the
+selected search scope. Once that complete scope yields one distinct candidate,
+validated in-window detail permits selection with participant/winner uncertainty
+warnings unless an explicit contradiction exists. `resolved` means selected;
+`verified_identity` and `unique_candidate` distinguish completed checks from
+selection with incomplete checks. Evidence statuses and original facts are not
+upgraded to manufacture verification. Candidate
 details are fetched only when they can add evidence. Search and detail reads are
 bounded; continued pagination or time-window expansion cannot run indefinitely.
 No-candidate, insufficient-evidence, ambiguity, source failure, and exhausted
@@ -827,6 +851,14 @@ retain their full budget prechecks. Completion order does not change source orde
 or matching decisions. Failure or caller cancellation stops queued work and joins
 cancelled active workers before propagating the original error; no partial scope
 can produce success. This is a per-call concurrency bound, not a global limiter.
+
+Name comparison permits the small terminal-word list `esports`, `e-sports`, and
+`gaming`, with nonempty cores and no participant collisions; associations retain
+their original names and matching method. Shared product instructions carry the
+selection/warning meaning into execution, primary/rebuilt and degraded answers.
+Tool descriptions agree: models assess existing evidence, may retrieve detail
+for a selected ID, preserve uncertainty, and cannot pick an ID from unresolved
+evidence. No model-driven identity re-query or new confirmation tool is required.
 
 ## Steam player and game-detail boundaries
 

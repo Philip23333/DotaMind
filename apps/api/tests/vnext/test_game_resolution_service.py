@@ -207,11 +207,15 @@ def _service(provider: Any) -> GameResolutionService:
     return GameResolutionService(provider, policy=_policy())
 
 
-def _resolver_attempt(category: str = "resolved") -> GameResolutionReadAttempt:
+def _resolver_attempt(
+    category: str = "resolved", *, uncertain: bool = False,
+) -> GameResolutionReadAttempt:
     context = _context()
     leagues = (_league(),)
     row = _league_row()
     detail = _detail()
+    if uncertain:
+        detail.data["dire_team"]["name"] = "Unaligned source team name"
     if category == "resolved":
         outcome = resolve_game_across_leagues(
             context,
@@ -264,6 +268,42 @@ async def test_service_calls_provider_once_with_original_request_objects() -> No
     assert passed_policy is policy
     assert passed_mappings is mappings
     assert result.status == "resolved"
+
+
+@_async_test
+async def test_service_returns_selected_id_and_original_identity_warnings() -> None:
+    attempt = _resolver_attempt(uncertain=True)
+    result = await _service(_FakeProvider(attempt)).resolve(
+        _MATCH_ID, _GAME_POSITION, confirmed_mappings={},
+    )
+    assert result.status == "resolved"
+    assert result.valve_game_id == _VALVE_GAME_ID
+    assert result.selection_basis == "unique_candidate"
+    assert result.warnings == ["participant_names_unaligned", "winner_participants_unavailable"]
+    assert result.reason is None
+    evidence = result.data["resolution_result"]["candidate_assessments"][0]
+    assert evidence["status"] == "unresolved"
+    assert result.data["resolution_result"]["warnings"] == result.warnings
+
+
+@_async_test
+@pytest.mark.parametrize("corruption", ["drop_warnings", "verified_label", "extra_candidate"])
+async def test_service_rejects_inconsistent_unique_selection(corruption: str) -> None:
+    attempt = _resolver_attempt(uncertain=True)
+    outcome = attempt.resolution_result
+    if corruption == "drop_warnings":
+        outcome = replace(outcome, warnings=())
+    elif corruption == "verified_label":
+        outcome = replace(outcome, selection_basis="verified_identity", warnings=())
+    else:
+        another = replace(
+            outcome.candidate_assessments[0], candidate_valve_game_id=_VALVE_GAME_ID + 1
+        )
+        outcome = replace(outcome, candidate_assessments=(*outcome.candidate_assessments, another))
+    with pytest.raises(GameResolutionContractError):
+        await _service(_FakeProvider(replace(attempt, resolution_result=outcome))).resolve(
+            _MATCH_ID, _GAME_POSITION, confirmed_mappings={},
+        )
 
 
 @pytest.mark.parametrize(
@@ -545,6 +585,7 @@ async def test_resolution_evidence_retains_associations_without_exposing_raw_rea
         "opendota_team_id": 9_823_272,
         "pandascore_name": "Team Yandex",
         "opendota_name": "Team Yandex",
+        "name_match_method": "normalized_exact",
     }
     result.data["target_game_result"]["target_game"]["unmodeled_game_fact"].append("changed")
     identity["participant_associations"][0]["opendota_name"] = "changed"
@@ -556,6 +597,7 @@ async def test_resolution_evidence_retains_associations_without_exposing_raw_rea
 def test_result_contract_rejects_coercion_unknown_fields_and_inconsistent_status() -> None:
     base = {
         "status": "resolved",
+        "selection_basis": "verified_identity",
         "game_position": _GAME_POSITION,
         "valve_game_id": _VALVE_GAME_ID,
         "method": "inferred_cross_source",
@@ -576,6 +618,9 @@ def test_result_contract_rejects_coercion_unknown_fields_and_inconsistent_status
         {**base, "status": "unresolved"},
         {**base, "valve_game_id": None},
         {**base, "reason": "made_up_reason"},
+        {**base, "selection_basis": None},
+        {**base, "selection_basis": "unique_candidate"},
+        {**base, "warnings": ["participant_names_unaligned"]},
     ]
     for document in invalid_documents:
         with pytest.raises(ValidationError):

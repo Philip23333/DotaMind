@@ -181,6 +181,52 @@ def test_different_provider_team_ids_are_preserved_but_not_compared() -> None:
     ]
 
 
+@pytest.mark.parametrize("suffix", ["esports", "e-sports", "gaming", "GAMING!"])
+def test_terminal_common_suffix_preserves_original_names_and_matching_method(suffix: str) -> None:
+    name = f"Level UP {suffix}"
+    result = _compare(
+        _context(10, "Natus Vincere", 20, "Level UP"),
+        detail=_detail(radiant_name="Natus Vincere", dire_name=name),
+    )
+    assert result.participants_status == "supported"
+    assert result.winner_status == "consistent"
+    exact, relaxed = result.participant_associations
+    assert exact.name_match_method == "normalized_exact"
+    assert relaxed.name_match_method == "common_suffix"
+    assert relaxed.pandascore_name == "Level UP"
+    assert relaxed.opendota_name == name
+    assert result.facts.opendota_participants[1].name == name
+
+
+@pytest.mark.parametrize("name", [
+    "Level UPgaming", "Level Gaming UP", "Level UP Academy", "Level UP Junior",
+    "Level UP China", "Level UP esports Academy", "Gaming",
+])
+def test_name_compatibility_does_not_strip_substrings_or_identity_qualifiers(name: str) -> None:
+    result = _compare(
+        _context(10, "Natus Vincere", 20, "Level UP"),
+        detail=_detail(radiant_name="Natus Vincere", dire_name=name),
+    )
+    assert result.participants_status == "unknown"
+    assert result.participant_associations == ()
+
+
+def test_suffix_stripping_cannot_collapse_both_participants_into_one_name() -> None:
+    result = _compare(
+        _context(10, "Alpha Gaming", 20, "Alpha esports"),
+        detail=_detail(radiant_name="Alpha", dire_name="Alpha e-sports"),
+    )
+    assert result.participants_status == "unknown"
+    assert "participant_name_collision" in result.reasons
+
+
+def test_missing_source_team_id_is_uncertain_rather_than_a_winner_contradiction() -> None:
+    result = _compare(_context(radiant_id=None))
+    assert result.winner_status == "unknown"
+    assert "winner_participants_unavailable" in result.reasons
+    assert "game_winner_not_in_participants" not in result.reasons
+
+
 @pytest.mark.parametrize(
     ("game", "detail", "expected", "reason"),
     [

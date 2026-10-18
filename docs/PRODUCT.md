@@ -190,7 +190,8 @@ bounded sample. This is a single-account check, not a general availability
 guarantee. `game.detail` reads an existing OpenDota game record and registers
 only when `DOTAMIND_OPENDOTA_ENABLED=true`. Reading a record does not submit a
 replay for parsing. The profile query has not been verified against the live
-STRATZ API, and the new OpenDota client has not had a live request test.
+STRATZ API. A subsequent live single-game comparison for `8960991322` verified
+selected STRATZ/OpenDota source facts; it does not establish general coverage.
 
 For the account-to-game journey, a user can provide a Steam32 ID, inspect its
 bounded recent-games list, select one returned `valve_game_id`, and request
@@ -208,12 +209,24 @@ match facts. This enrichment is verified offline; its data contract is owned
 by [`agent/game_detail_data.md`](agent/game_detail_data.md). Missing timelines or
 purchase data are evidence gaps, not proof that events or purchases did not occur.
 
+The accepted next detail model uses STRATZ first, with fixed OpenDota supplements
+inside the tool. Users still request one `valve_game_id`; the model does not have
+to discover another provider to fill known data gaps. Minute economy means
+cumulative earned income, not wallet balance or remaining net worth. Minute net
+worth is removed; final earned-income/net-worth difference is available only with
+reliable same-instant inputs. Known timed deaths and final death totals have
+separate coverage. Explicit timed equipment observations do not reconstruct
+inventory from purchases. These changes are documented targets, not current API
+behavior. The [owner contract](agent/game_detail_data.md) defines their scope;
+ratings, role inference, and frontend design remain outside it.
+
 ### Esports Match-to-game-detail journey (opt-in capability; real-model behavior unverified)
 
 PandaScore match and game discovery already exists, and `game.detail` already
 reads one OpenDota game by `valve_game_id`. When the opt-in game-resolution tool
 is enabled with PandaScore and OpenDota configured, it can connect a selected
-Match Artifact and Game position to a confirmed Valve identity. The model-driven
+Match Artifact and Game position to a selected Valve identity with its evidence
+and any incomplete-check warnings. The model-driven
 user journey is:
 
 ```text
@@ -228,8 +241,8 @@ The user can ask for a game such as “game four” without providing a Valve ID
 the selected game ordinal and the trusted Match context identify the resolution
 target. Other games in the Match may help establish context, but the product
 does not automatically fetch full details for every game. If one game's identity
-cannot be confirmed, results for other
-confirmed games remain usable. A scheduled Game, a forfeit record, and an
+cannot be selected, results for other
+selected games remain usable. A scheduled Game, a forfeit record, and an
 actually played Game are distinct; a forfeit may have no Valve game. When
 identity remains unresolved, the answer retains known esports facts and says
 that the detail path could not be connected. A resolved identity still does not
@@ -245,7 +258,13 @@ cross-source evidence boundary and unresolved outcomes are defined in
 The capability is absent from the default tool inventory, and enabling it does
 not guarantee provider availability or successful resolution. Cross-call
 mapping reuse and whole-Match consistency are not implemented; the model chooses
-whether to call `game.detail` after it receives a confirmed `valve_game_id`.
+whether to call `game.detail` after it receives a selected `valve_game_id`.
+`resolved` does not imply every identity check passed. A sole candidate in the
+complete searched scope can be selected with warnings about uncertain names or
+winner evidence. The model judges the existing evidence and can continue to detail
+without another identity lookup solely to remove those warnings. Material
+uncertainty about the esports association remains explicit in the answer; common
+terminal `esports`/`e-sports`/`gaming` differences are handled by the converter.
 
 ## Product boundaries
 

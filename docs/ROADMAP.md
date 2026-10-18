@@ -475,9 +475,9 @@ higher priority.
   HTTP-mock tests do not establish live OpenDota availability. The prior
   `8960882635` cross-source ID check remains single-match evidence only.
 
-### Game detail eight-section projection (implemented; deterministic acceptance passed)
+### Current OpenDota eight-section projection (baseline implemented)
 
-The implemented contract is owned by
+The current baseline and accepted next contract are distinguished in
 [`agent/game_detail_data.md`](agent/game_detail_data.md). `game.detail(valve_game_id)`
 returns the complete governed DTO through generic Artifact handling. It preserves
 match provenance, adds one Catalog version and one unit-mapping version, and
@@ -519,6 +519,39 @@ from the local Valve catalog, and keep the prior list available for ordinal
 follow-ups. This verifies scripted orchestration only, not real-model tool
 selection or answer quality. Real provider/model evaluation remains separate.
 
+### STRATZ-first detail governance (accepted design; implementation pending)
+
+The target is owned by [the game-detail contract](agent/game_detail_data.md).
+[Live source observations](reference/stratz-game-detail.md) for `8960991322`
+support the design; this documentation work does not switch the provider or
+establish acceptance of the replacement. Keep implementation boundaries small:
+
+1. Verify fixed STRATZ query selections, source models/identity namespaces,
+   per-series time semantics, and the candidate death-selection rule on the
+   additional real cases in EVALS. Preserve complete internal source records;
+   retain the existing OpenDota resolver path and request-source reuse.
+2. Implement the target economic/death schema and deterministic projection:
+   cumulative-income/XP names, no minute net worth, same-instant-only final gap,
+   normalized deaths plus `known_deaths` and independent final totals. Verify
+   existing exact-time fixture values under the new names.
+3. Add STRATZ build/interaction/event extraction and the fixed OpenDota
+   supplemental groups. Preserve purchases versus observed inventory and timed
+   upgrades; use explicit Tormentor messages and whole-category objective
+   supplements. Unverified encodings remain explicit limitations.
+4. Connect Service composition, multi-source provenance/coverage, errors and
+   actual tool descriptions/registration together. Keep generic Artifact and
+   Runtime unaware of the provider plan; do not add a dynamic router or model
+   fallback workflow. Test the complete public result and resolver boundary.
+5. Run focused deterministic, live-provider, and real-model acceptance in
+   [EVALS](EVALS.md). Only then describe the STRATZ-first switch as implemented.
+
+These are implementation boundaries, not commits already made. Frontend,
+background League-index backfill, replay parsing, new persistent storage, and
+deployment are not part of this data-governance decision. New semantics that fail
+verification stay null/partial with coverage; they are not guessed to meet a
+completeness target. Registration/environment changes belong to implementation,
+not this documentation update.
+
 ## PandaScore Match to OpenDota game identity (offline path implemented; live Agent evaluation pending)
 
 Connect one selected PandaScore Game to the existing `game.detail` capability
@@ -537,11 +570,12 @@ sampled source evidence in
 3. **Implemented, opt-in:** compose the Service and `esports.game.resolve` from
    the Match-search Artifact. It is absent by default and registers only when
    enabled with PandaScore and OpenDota configured. A product-composed offline
-   fixture chain continues a confirmed ID to `game.detail`; mock transport proves
+   fixture chain continues a selected ID to `game.detail`; mock transport proves
    deterministic wiring, not live availability.
 4. **Pending:** evaluate bounded live Provider coverage, then observe a real model
-   selecting a game, invoking resolution, calling `game.detail` only after
-   confirmation, and describing missing fields accurately.
+   selecting a game, invoking resolution, reviewing returned selection warnings,
+   calling `game.detail` for a selected ID without an identity re-query solely
+   to clear warnings, and describing missing fields and uncertainty accurately.
 
 Each phase should deliver one boundary with focused tests. Do not introduce a
 persistent mapping library, recurring background synchronization, provider

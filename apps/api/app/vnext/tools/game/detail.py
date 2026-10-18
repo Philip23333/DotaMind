@@ -16,6 +16,12 @@ may be explicitly provided by the user, returned by player.recent_games, or
 returned as valve_game_id by a resolved esports.game.resolve result. A PandaScore
 Match, Series, or Game ID is not a Valve Game ID and cannot be passed here.
 
+A resolved game-resolution result may select a sole candidate with identity
+warnings. Read its selection_basis, warnings and evidence before using the ID;
+these warnings do not prohibit this lookup. This tool returns facts for the
+requested Valve ID and does not independently verify its esports association.
+Preserve material association uncertainty when interpreting or reporting facts.
+
 Returns eight governed sections: match, draft, players, economy, builds,
 events, interactions, and coverage. Hero, item, ability, and event-unit objects
 include confirmed IDs where applicable and English/Chinese names from local
