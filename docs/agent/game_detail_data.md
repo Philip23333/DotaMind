@@ -409,14 +409,19 @@ Each normalized `hero_deaths` row has:
 | `time_dead_label` | string or `null` | Program-formatted `time_dead_seconds` |
 | `source_paths` | provenance-pair array | Exact contributing source records; retain both paths only for a verified association |
 
-The candidate STRATZ construction uses the owning player's
-`playbackData.goldEvents` with `reason="DEATH"`, associates unambiguous same-player
-death records by verified time/amount facts, and retains their source paths.
+The initial STRATZ construction uses the owning player's
+`playbackData.goldEvents` with `reason="DEATH"` to retain death facts and times.
+Only a unique same-owner-hero, same-time, one-to-one death record supplies
+additional attributes; ambiguous associations retain null attributes and their
+coverage reason. Three live games (203 facts across 30 players) matched final
+per-player counts. Do not filter these facts by `isValidForStats`: it is false
+for all sampled DEATH records. Do not join by gold amount or fill `gold_lost`
+from its negation: it often differs from explicit `deathEvents.goldLost`.
 Raw `stats/playbackData.deathEvents` and `killEvents` contain substantially more
 records than final totals in the sample. Neither raw length, `timeDead>0`, nor
 `goldFed>0` is a valid general death-selection rule. Do not drop zero-amount
-DEATH records. This candidate rule needs the additional samples listed below
-before implementation can claim a complete death timeline.
+DEATH records. Additional encodings and historical cases still require the
+verification below; these samples do not prove universal completeness.
 
 OpenDota `players[].deaths_log`, when present, supplies explicit death facts;
 `kills_log` may supplement confirmed victims through exact same-game hero

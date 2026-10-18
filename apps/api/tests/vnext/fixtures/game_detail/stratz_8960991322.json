@@ -1,0 +1,6266 @@
+{
+  "match_id": 8960991322,
+  "provider": "stratz",
+  "retrieved_at": "2026-10-18T08:26:24.891705Z",
+  "data": {
+    "id": 8960991322,
+    "startDateTime": 1787486918,
+    "durationSeconds": 3862,
+    "didRadiantWin": false,
+    "gameVersionId": 189,
+    "firstBloodTime": 56,
+    "radiantTeamId": 9572001,
+    "direTeamId": 7119388,
+    "radiantTeam": {
+      "id": 9572001,
+      "name": "PARIVISION"
+    },
+    "direTeam": {
+      "id": 7119388,
+      "name": "Team Spirit"
+    },
+    "pickBans": [
+      {
+        "order": 0,
+        "isPick": false,
+        "heroId": 62,
+        "bannedHeroId": 62,
+        "isRadiant": false
+      },
+      {
+        "order": 1,
+        "isPick": false,
+        "heroId": 53,
+        "bannedHeroId": 53,
+        "isRadiant": false
+      },
+      {
+        "order": 2,
+        "isPick": false,
+        "heroId": 83,
+        "bannedHeroId": 83,
+        "isRadiant": true
+      },
+      {
+        "order": 3,
+        "isPick": false,
+        "heroId": 11,
+        "bannedHeroId": 11,
+        "isRadiant": true
+      },
+      {
+        "order": 4,
+        "isPick": false,
+        "heroId": 69,
+        "bannedHeroId": 69,
+        "isRadiant": false
+      },
+      {
+        "order": 5,
+        "isPick": false,
+        "heroId": 80,
+        "bannedHeroId": 80,
+        "isRadiant": true
+      },
+      {
+        "order": 6,
+        "isPick": false,
+        "heroId": 107,
+        "bannedHeroId": 107,
+        "isRadiant": true
+      },
+      {
+        "order": 7,
+        "isPick": true,
+        "heroId": 3,
+        "bannedHeroId": null,
+        "isRadiant": false
+      },
+      {
+        "order": 8,
+        "isPick": true,
+        "heroId": 74,
+        "bannedHeroId": null,
+        "isRadiant": true
+      },
+      {
+        "order": 9,
+        "isPick": false,
+        "heroId": 112,
+        "bannedHeroId": 112,
+        "isRadiant": false
+      },
+      {
+        "order": 10,
+        "isPick": false,
+        "heroId": 119,
+        "bannedHeroId": 119,
+        "isRadiant": false
+      },
+      {
+        "order": 11,
+        "isPick": false,
+        "heroId": 28,
+        "bannedHeroId": 28,
+        "isRadiant": true
+      },
+      {
+        "order": 12,
+        "isPick": true,
+        "heroId": 86,
+        "bannedHeroId": null,
+        "isRadiant": true
+      },
+      {
+        "order": 13,
+        "isPick": true,
+        "heroId": 120,
+        "bannedHeroId": null,
+        "isRadiant": false
+      },
+      {
+        "order": 14,
+        "isPick": true,
+        "heroId": 9,
+        "bannedHeroId": null,
+        "isRadiant": false
+      },
+      {
+        "order": 15,
+        "isPick": true,
+        "heroId": 2,
+        "bannedHeroId": null,
+        "isRadiant": true
+      },
+      {
+        "order": 16,
+        "isPick": true,
+        "heroId": 123,
+        "bannedHeroId": null,
+        "isRadiant": true
+      },
+      {
+        "order": 17,
+        "isPick": true,
+        "heroId": 54,
+        "bannedHeroId": null,
+        "isRadiant": false
+      },
+      {
+        "order": 18,
+        "isPick": false,
+        "heroId": 41,
+        "bannedHeroId": 41,
+        "isRadiant": false
+      },
+      {
+        "order": 19,
+        "isPick": false,
+        "heroId": 96,
+        "bannedHeroId": 96,
+        "isRadiant": true
+      },
+      {
+        "order": 20,
+        "isPick": false,
+        "heroId": 109,
+        "bannedHeroId": 109,
+        "isRadiant": false
+      },
+      {
+        "order": 21,
+        "isPick": false,
+        "heroId": 13,
+        "bannedHeroId": 13,
+        "isRadiant": true
+      },
+      {
+        "order": 22,
+        "isPick": true,
+        "heroId": 55,
+        "bannedHeroId": null,
+        "isRadiant": false
+      },
+      {
+        "order": 23,
+        "isPick": true,
+        "heroId": 8,
+        "bannedHeroId": null,
+        "isRadiant": true
+      }
+    ],
+    "chatEvents": [
+      {
+        "time": -79,
+        "type": 1000,
+        "fromHeroId": 120,
+        "toHeroId": 2,
+        "value": 50,
+        "isRadiant": false
+      },
+      {
+        "time": -75,
+        "type": 1000,
+        "fromHeroId": 2,
+        "toHeroId": 120,
+        "value": 50,
+        "isRadiant": false
+      },
+      {
+        "time": 79,
+        "type": 5,
+        "fromHeroId": 9,
+        "toHeroId": null,
+        "value": 304,
+        "isRadiant": false
+      },
+      {
+        "time": 241,
+        "type": 114,
+        "fromHeroId": 74,
+        "toHeroId": null,
+        "value": 7,
+        "isRadiant": false
+      },
+      {
+        "time": 297,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": true
+      },
+      {
+        "time": 384,
+        "type": 1000,
+        "fromHeroId": 55,
+        "toHeroId": 123,
+        "value": 50,
+        "isRadiant": false
+      },
+      {
+        "time": 388,
+        "type": 1000,
+        "fromHeroId": 8,
+        "toHeroId": 123,
+        "value": 50,
+        "isRadiant": false
+      },
+      {
+        "time": 413,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 726,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 772,
+        "type": 3,
+        "fromHeroId": 123,
+        "toHeroId": null,
+        "value": 2,
+        "isRadiant": false
+      },
+      {
+        "time": 845,
+        "type": 114,
+        "fromHeroId": 74,
+        "toHeroId": null,
+        "value": 2,
+        "isRadiant": false
+      },
+      {
+        "time": 947,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": true
+      },
+      {
+        "time": 953,
+        "type": 3,
+        "fromHeroId": 123,
+        "toHeroId": null,
+        "value": 2,
+        "isRadiant": false
+      },
+      {
+        "time": 1006,
+        "type": 3,
+        "fromHeroId": 120,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 1167,
+        "type": 3,
+        "fromHeroId": 55,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 1181,
+        "type": 3,
+        "fromHeroId": 2,
+        "toHeroId": null,
+        "value": 2,
+        "isRadiant": false
+      },
+      {
+        "time": 1982,
+        "type": 117,
+        "fromHeroId": 3,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 2118,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 2135,
+        "type": 3,
+        "fromHeroId": 8,
+        "toHeroId": null,
+        "value": 2,
+        "isRadiant": false
+      },
+      {
+        "time": 2141,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 2366,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": true
+      },
+      {
+        "time": 2375,
+        "type": 3,
+        "fromHeroId": 3,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 2494,
+        "type": 3,
+        "fromHeroId": 54,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 2506,
+        "type": 119,
+        "fromHeroId": 86,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 2613,
+        "type": 3,
+        "fromHeroId": 8,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 2839,
+        "type": 117,
+        "fromHeroId": 54,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 2985,
+        "type": 3,
+        "fromHeroId": 74,
+        "toHeroId": null,
+        "value": 2,
+        "isRadiant": false
+      },
+      {
+        "time": 3108,
+        "type": 119,
+        "fromHeroId": 74,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 3146,
+        "type": 11,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 3206,
+        "type": 3,
+        "fromHeroId": 74,
+        "toHeroId": null,
+        "value": 2,
+        "isRadiant": false
+      },
+      {
+        "time": 3503,
+        "type": 3,
+        "fromHeroId": 55,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 3519,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": true
+      },
+      {
+        "time": 3852,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": true
+      },
+      {
+        "time": 3854,
+        "type": 1000,
+        "fromHeroId": 8,
+        "toHeroId": 54,
+        "value": 50,
+        "isRadiant": false
+      },
+      {
+        "time": 3856,
+        "type": 34,
+        "fromHeroId": 3,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 3856,
+        "type": 36,
+        "fromHeroId": 55,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 3861,
+        "type": 3,
+        "fromHeroId": 3,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 3862,
+        "type": 15,
+        "fromHeroId": 123,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      }
+    ],
+    "players": [
+      {
+        "steamAccountId": 1044002267,
+        "playerSlot": 0,
+        "heroId": 8,
+        "isRadiant": true,
+        "kills": 8,
+        "deaths": 5,
+        "assists": 8,
+        "level": 28,
+        "numLastHits": 894,
+        "numDenies": 31,
+        "heroDamage": 46111,
+        "towerDamage": 1919,
+        "heroHealing": 12903,
+        "networth": 40422,
+        "item0Id": 147,
+        "item1Id": 208,
+        "item2Id": 225,
+        "item3Id": 139,
+        "item4Id": 603,
+        "item5Id": 135,
+        "backpack0Id": null,
+        "backpack1Id": 116,
+        "backpack2Id": null,
+        "neutral0Id": 1718,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": -89,
+              "itemId": 16
+            },
+            {
+              "time": 3323,
+              "itemId": 208
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 55,
+                "amount": 15238
+              },
+              {
+                "target": 9,
+                "amount": 9342
+              },
+              {
+                "target": 120,
+                "amount": 6982
+              },
+              {
+                "target": 54,
+                "amount": 18189
+              },
+              {
+                "target": 3,
+                "amount": 3980
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 1737,
+              "amount": -544,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2297,
+              "amount": -694,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3453,
+              "amount": -1071,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3796,
+              "amount": -1121,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3842,
+              "amount": -1007,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 152,
+              "attacker": 8,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 212,
+              "attacker": 8,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 385,
+              "attacker": 8,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 446,
+              "attacker": 8,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 576,
+              "attacker": 8,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 804,
+              "attacker": 55,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 902,
+              "attacker": 8,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1381,
+              "attacker": 8,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1727,
+              "attacker": 55,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1737,
+              "attacker": 120,
+              "target": 8,
+              "goldFed": 1191,
+              "goldLost": 544,
+              "timeDead": 80
+            },
+            {
+              "time": 2015,
+              "attacker": 8,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2064,
+              "attacker": 54,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2297,
+              "attacker": 55,
+              "target": 8,
+              "goldFed": 1512,
+              "goldLost": 282,
+              "timeDead": 95
+            },
+            {
+              "time": 2960,
+              "attacker": 8,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3039,
+              "attacker": 8,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3193,
+              "attacker": 9,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3297,
+              "attacker": 8,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3453,
+              "attacker": 120,
+              "target": 8,
+              "goldFed": 2207,
+              "goldLost": 1071,
+              "timeDead": 100
+            },
+            {
+              "time": 3796,
+              "attacker": 120,
+              "target": 8,
+              "goldFed": 1905,
+              "goldLost": 1121,
+              "timeDead": 6
+            },
+            {
+              "time": 3834,
+              "attacker": 54,
+              "target": 8,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3842,
+              "attacker": 55,
+              "target": 8,
+              "goldFed": 1679,
+              "goldLost": 43,
+              "timeDead": 19
+            }
+          ],
+          "buyBackEvents": [
+            {
+              "time": 3803
+            }
+          ],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 5028,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 80,
+              "abilityId": 5029,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 3349,
+              "abilityId": 628,
+              "level": 0,
+              "levelObtained": 28
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item1": {
+                "itemId": 11,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 34,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 35,
+              "item0": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item1": {
+                "itemId": 11,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 34,
+                "charges": 1
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 3843,
+              "item0": {
+                "itemId": 147,
+                "charges": 0
+              },
+              "item1": {
+                "itemId": 208,
+                "charges": 0
+              },
+              "item2": {
+                "itemId": 225,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 139,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 603,
+                "charges": 0
+              },
+              "item5": {
+                "itemId": 135,
+                "charges": 0
+              },
+              "backPack0": null,
+              "backPack1": {
+                "itemId": 116,
+                "charges": 0
+              },
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 1718,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 195108598,
+        "playerSlot": 1,
+        "heroId": 2,
+        "isRadiant": true,
+        "kills": 11,
+        "deaths": 5,
+        "assists": 10,
+        "level": 26,
+        "numLastHits": 484,
+        "numDenies": 10,
+        "heroDamage": 21179,
+        "towerDamage": 148,
+        "heroHealing": 0,
+        "networth": 30109,
+        "item0Id": 123,
+        "item1Id": 147,
+        "item2Id": 1,
+        "item3Id": 225,
+        "item4Id": 110,
+        "item5Id": 116,
+        "backpack0Id": 50,
+        "backpack1Id": null,
+        "backpack2Id": 40,
+        "neutral0Id": 371,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 13
+            },
+            {
+              "time": -89,
+              "itemId": 12
+            },
+            {
+              "time": 3550,
+              "itemId": 110
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 3,
+                "amount": 4164
+              },
+              {
+                "target": 54,
+                "amount": 7519
+              },
+              {
+                "target": 120,
+                "amount": 3080
+              },
+              {
+                "target": 9,
+                "amount": 3030
+              },
+              {
+                "target": 55,
+                "amount": 6145
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 2329,
+              "amount": -547,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3219,
+              "amount": -739,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3466,
+              "amount": -786,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3787,
+              "amount": -838,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3845,
+              "amount": -768,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 305,
+              "attacker": 2,
+              "target": 2,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 810,
+              "attacker": 54,
+              "target": 2,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1004,
+              "attacker": 2,
+              "target": 2,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1078,
+              "attacker": 55,
+              "target": 2,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1198,
+              "attacker": 54,
+              "target": 2,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1464,
+              "attacker": 120,
+              "target": 2,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1569,
+              "attacker": 2,
+              "target": 2,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1681,
+              "attacker": 2,
+              "target": 2,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1735,
+              "attacker": 54,
+              "target": 2,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1895,
+              "attacker": 54,
+              "target": 2,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2329,
+              "attacker": 55,
+              "target": 2,
+              "goldFed": 1582,
+              "goldLost": 547,
+              "timeDead": 80
+            },
+            {
+              "time": 2479,
+              "attacker": 54,
+              "target": 2,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3219,
+              "attacker": 55,
+              "target": 2,
+              "goldFed": 1525,
+              "goldLost": 739,
+              "timeDead": 100
+            },
+            {
+              "time": 3466,
+              "attacker": 54,
+              "target": 2,
+              "goldFed": 1603,
+              "goldLost": 786,
+              "timeDead": 100
+            },
+            {
+              "time": 3787,
+              "attacker": 55,
+              "target": 2,
+              "goldFed": 1518,
+              "goldLost": 838,
+              "timeDead": 11
+            },
+            {
+              "time": 3845,
+              "attacker": 120,
+              "target": 2,
+              "goldFed": 1358,
+              "goldLost": 676,
+              "timeDead": 16
+            }
+          ],
+          "buyBackEvents": [
+            {
+              "time": 3798
+            }
+          ],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 5008,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 113,
+              "abilityId": 5009,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 3195,
+              "abilityId": 6608,
+              "level": 0,
+              "levelObtained": 25
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": null,
+              "item1": {
+                "itemId": 13,
+                "charges": null
+              },
+              "item2": null,
+              "item3": {
+                "itemId": 13,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 12,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 13,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": -84,
+              "item0": null,
+              "item1": {
+                "itemId": 13,
+                "charges": null
+              },
+              "item2": null,
+              "item3": {
+                "itemId": 13,
+                "charges": null
+              },
+              "item4": null,
+              "item5": {
+                "itemId": 13,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 3846,
+              "item0": {
+                "itemId": 123,
+                "charges": 0
+              },
+              "item1": {
+                "itemId": 147,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 1,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 225,
+                "charges": 0
+              },
+              "item4": {
+                "itemId": 110,
+                "charges": 0
+              },
+              "item5": {
+                "itemId": 116,
+                "charges": null
+              },
+              "backPack0": {
+                "itemId": 50,
+                "charges": 0
+              },
+              "backPack1": null,
+              "backPack2": {
+                "itemId": 40,
+                "charges": 2
+              },
+              "neutral0": {
+                "itemId": 371,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 106573901,
+        "playerSlot": 2,
+        "heroId": 74,
+        "isRadiant": true,
+        "kills": 1,
+        "deaths": 5,
+        "assists": 22,
+        "level": 27,
+        "numLastHits": 661,
+        "numDenies": 16,
+        "heroDamage": 39792,
+        "towerDamage": 6209,
+        "heroHealing": 0,
+        "networth": 37505,
+        "item0Id": 110,
+        "item1Id": 220,
+        "item2Id": 256,
+        "item3Id": 119,
+        "item4Id": 116,
+        "item5Id": 96,
+        "backpack0Id": 33,
+        "backpack1Id": 235,
+        "backpack2Id": null,
+        "neutral0Id": 1863,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 20
+            },
+            {
+              "time": -89,
+              "itemId": 16
+            },
+            {
+              "time": 3862,
+              "itemId": 46
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 120,
+                "amount": 12162
+              },
+              {
+                "target": 9,
+                "amount": 5633
+              },
+              {
+                "target": 3,
+                "amount": 10289
+              },
+              {
+                "target": 55,
+                "amount": 8229
+              },
+              {
+                "target": 54,
+                "amount": 10676
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 796,
+              "amount": -140,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 949,
+              "amount": -167,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2309,
+              "amount": -577,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3781,
+              "amount": -1024,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3833,
+              "amount": -933,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 74,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 138,
+              "attacker": 120,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 188,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 209,
+              "attacker": 120,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 256,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 314,
+              "attacker": 120,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 355,
+              "attacker": 9,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 362,
+              "attacker": 9,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 416,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 484,
+              "attacker": 120,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 552,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 570,
+              "attacker": 9,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 697,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 739,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 767,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 768,
+              "attacker": 9,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 796,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 569,
+              "goldLost": 140,
+              "timeDead": 35
+            },
+            {
+              "time": 868,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 910,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 939,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 949,
+              "attacker": 9,
+              "target": 74,
+              "goldFed": 563,
+              "goldLost": 167,
+              "timeDead": 34
+            },
+            {
+              "time": 950,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 34
+            },
+            {
+              "time": 1026,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1026,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1081,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1130,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1157,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1192,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1230,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1232,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1269,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1269,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1311,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1324,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1344,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1346,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1385,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1385,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1427,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1462,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1463,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1485,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1518,
+              "attacker": 120,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1565,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1612,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1654,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1660,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1708,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1711,
+              "attacker": 120,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1818,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1819,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1961,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1987,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1996,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2017,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2018,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2103,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2123,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2124,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2156,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2161,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2218,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2263,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2300,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2309,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 1276,
+              "goldLost": 577,
+              "timeDead": 85
+            },
+            {
+              "time": 2313,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 82
+            },
+            {
+              "time": 2329,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 66
+            },
+            {
+              "time": 2455,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2455,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2456,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2515,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2545,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2601,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2602,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2602,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2624,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2625,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2630,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2651,
+              "attacker": 9,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2663,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2665,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2732,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2737,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2742,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2765,
+              "attacker": 120,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2766,
+              "attacker": 120,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2767,
+              "attacker": 120,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2825,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2878,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2885,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2891,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2914,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2917,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2918,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3006,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3015,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3017,
+              "attacker": 120,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3107,
+              "attacker": 120,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3108,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3128,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3129,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3129,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3214,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3233,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3234,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3236,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3266,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3272,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3276,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3339,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3361,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3392,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3393,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3414,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3453,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3462,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3480,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3494,
+              "attacker": 9,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3494,
+              "attacker": 9,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3513,
+              "attacker": 9,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3514,
+              "attacker": 9,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3532,
+              "attacker": 9,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3535,
+              "attacker": 9,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3558,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3596,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3597,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3598,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3634,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3636,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3639,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3666,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3717,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3720,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3721,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3759,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3761,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3762,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3781,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 1845,
+              "goldLost": 1024,
+              "timeDead": 1
+            },
+            {
+              "time": 3801,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3808,
+              "attacker": null,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3821,
+              "attacker": 74,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3825,
+              "attacker": 9,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3825,
+              "attacker": 120,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3829,
+              "attacker": 55,
+              "target": 74,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3833,
+              "attacker": 54,
+              "target": 74,
+              "goldFed": 1596,
+              "goldLost": 572,
+              "timeDead": 28
+            }
+          ],
+          "buyBackEvents": [
+            {
+              "time": 3783
+            }
+          ],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 5372,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 46,
+              "abilityId": 5370,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 2966,
+              "abilityId": 5762,
+              "level": 0,
+              "levelObtained": 25
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item1": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 42,
+                "charges": 1
+              },
+              "item4": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item5": {
+                "itemId": 20,
+                "charges": null
+              },
+              "backPack0": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": -79,
+              "item0": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item1": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item3": null,
+              "item4": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item5": {
+                "itemId": 20,
+                "charges": null
+              },
+              "backPack0": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 3792,
+              "item0": {
+                "itemId": 110,
+                "charges": 0
+              },
+              "item1": {
+                "itemId": 220,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 256,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 119,
+                "charges": 0
+              },
+              "item4": {
+                "itemId": 116,
+                "charges": 0
+              },
+              "item5": {
+                "itemId": 96,
+                "charges": 0
+              },
+              "backPack0": {
+                "itemId": 33,
+                "charges": 1
+              },
+              "backPack1": {
+                "itemId": 235,
+                "charges": 0
+              },
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 1863,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 164199202,
+        "playerSlot": 3,
+        "heroId": 86,
+        "isRadiant": true,
+        "kills": 2,
+        "deaths": 11,
+        "assists": 23,
+        "level": 24,
+        "numLastHits": 86,
+        "numDenies": 2,
+        "heroDamage": 20841,
+        "towerDamage": 0,
+        "heroHealing": 0,
+        "networth": 12671,
+        "item0Id": 218,
+        "item1Id": 610,
+        "item2Id": 1,
+        "item3Id": 40,
+        "item4Id": null,
+        "item5Id": 29,
+        "backpack0Id": null,
+        "backpack1Id": null,
+        "backpack2Id": null,
+        "neutral0Id": 326,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 20
+            },
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": 3665,
+              "itemId": 43
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 54,
+                "amount": 6242
+              },
+              {
+                "target": 3,
+                "amount": 7145
+              },
+              {
+                "target": 120,
+                "amount": 3720
+              },
+              {
+                "target": 9,
+                "amount": 3632
+              },
+              {
+                "target": 55,
+                "amount": 5622
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 329,
+              "amount": -24,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 404,
+              "amount": -27,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 801,
+              "amount": -67,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 993,
+              "amount": -82,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1133,
+              "amount": -93,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1326,
+              "amount": -109,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1715,
+              "amount": -152,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2303,
+              "amount": -209,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3179,
+              "amount": -294,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3203,
+              "amount": -266,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3845,
+              "amount": -356,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 276,
+              "attacker": 3,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 329,
+              "attacker": 9,
+              "target": 86,
+              "goldFed": 302,
+              "goldLost": 24,
+              "timeDead": 18
+            },
+            {
+              "time": 338,
+              "attacker": 9,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 10
+            },
+            {
+              "time": 404,
+              "attacker": 120,
+              "target": 86,
+              "goldFed": 289,
+              "goldLost": 0,
+              "timeDead": 21
+            },
+            {
+              "time": 412,
+              "attacker": 3,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 14
+            },
+            {
+              "time": 418,
+              "attacker": 3,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 8
+            },
+            {
+              "time": 668,
+              "attacker": 3,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 801,
+              "attacker": 55,
+              "target": 86,
+              "goldFed": 397,
+              "goldLost": 67,
+              "timeDead": 28
+            },
+            {
+              "time": 826,
+              "attacker": 9,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 4
+            },
+            {
+              "time": 829,
+              "attacker": 9,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 1
+            },
+            {
+              "time": 873,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 907,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 982,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 993,
+              "attacker": 120,
+              "target": 86,
+              "goldFed": 417,
+              "goldLost": 82,
+              "timeDead": 30
+            },
+            {
+              "time": 1106,
+              "attacker": 9,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1133,
+              "attacker": 120,
+              "target": 86,
+              "goldFed": 465,
+              "goldLost": 93,
+              "timeDead": 34
+            },
+            {
+              "time": 1326,
+              "attacker": 120,
+              "target": 86,
+              "goldFed": 518,
+              "goldLost": 109,
+              "timeDead": 36
+            },
+            {
+              "time": 1328,
+              "attacker": 120,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 35
+            },
+            {
+              "time": 1329,
+              "attacker": 3,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 34
+            },
+            {
+              "time": 1365,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1391,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1567,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1571,
+              "attacker": null,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1684,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1715,
+              "attacker": 54,
+              "target": 86,
+              "goldFed": 559,
+              "goldLost": 147,
+              "timeDead": 46
+            },
+            {
+              "time": 1820,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2061,
+              "attacker": 9,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2062,
+              "attacker": 9,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2260,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2303,
+              "attacker": 54,
+              "target": 86,
+              "goldFed": 698,
+              "goldLost": 0,
+              "timeDead": 52
+            },
+            {
+              "time": 2455,
+              "attacker": 3,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2638,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2913,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3121,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3169,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3178,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3179,
+              "attacker": 54,
+              "target": 86,
+              "goldFed": 777,
+              "goldLost": 294,
+              "timeDead": 6
+            },
+            {
+              "time": 3203,
+              "attacker": 120,
+              "target": 86,
+              "goldFed": 761,
+              "goldLost": 266,
+              "timeDead": 100
+            },
+            {
+              "time": 3263,
+              "attacker": 3,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 41
+            },
+            {
+              "time": 3304,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3787,
+              "attacker": 86,
+              "target": 86,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3845,
+              "attacker": 54,
+              "target": 86,
+              "goldFed": 837,
+              "goldLost": 356,
+              "timeDead": 1
+            }
+          ],
+          "buyBackEvents": [
+            {
+              "time": 3186
+            },
+            {
+              "time": 3846
+            }
+          ],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 5450,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 113,
+              "abilityId": 5448,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 3166,
+              "abilityId": 0,
+              "level": 0,
+              "levelObtained": 20
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item2": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item3": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item4": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": -79,
+              "item0": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item2": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item3": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item4": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": {
+                "itemId": 43,
+                "charges": 1
+              },
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 3846,
+              "item0": {
+                "itemId": 218,
+                "charges": 1
+              },
+              "item1": {
+                "itemId": 610,
+                "charges": 0
+              },
+              "item2": {
+                "itemId": 1,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 40,
+                "charges": 1
+              },
+              "item4": null,
+              "item5": {
+                "itemId": 29,
+                "charges": 0
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 326,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 73401082,
+        "playerSlot": 4,
+        "heroId": 123,
+        "isRadiant": true,
+        "kills": 8,
+        "deaths": 8,
+        "assists": 14,
+        "level": 24,
+        "numLastHits": 130,
+        "numDenies": 1,
+        "heroDamage": 21828,
+        "towerDamage": 0,
+        "heroHealing": 1163,
+        "networth": 11171,
+        "item0Id": 1,
+        "item1Id": 610,
+        "item2Id": 30,
+        "item3Id": 218,
+        "item4Id": null,
+        "item5Id": 29,
+        "backpack0Id": null,
+        "backpack1Id": null,
+        "backpack2Id": null,
+        "neutral0Id": 1863,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": -89,
+              "itemId": 43
+            },
+            {
+              "time": 3851,
+              "itemId": 43
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 9,
+                "amount": 4357
+              },
+              {
+                "target": 55,
+                "amount": 8571
+              },
+              {
+                "target": 3,
+                "amount": 4748
+              },
+              {
+                "target": 120,
+                "amount": 4506
+              },
+              {
+                "target": 54,
+                "amount": 3707
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 605,
+              "amount": -56,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 736,
+              "amount": -76,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 797,
+              "amount": -82,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1144,
+              "amount": -116,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1789,
+              "amount": -185,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1904,
+              "amount": -192,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3233,
+              "amount": -305,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3841,
+              "amount": -298,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 56,
+              "attacker": 9,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 315,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 391,
+              "attacker": 9,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 605,
+              "attacker": 3,
+              "target": 123,
+              "goldFed": 469,
+              "goldLost": 56,
+              "timeDead": 24
+            },
+            {
+              "time": 736,
+              "attacker": 120,
+              "target": 123,
+              "goldFed": 424,
+              "goldLost": 76,
+              "timeDead": 28
+            },
+            {
+              "time": 797,
+              "attacker": 55,
+              "target": 123,
+              "goldFed": 437,
+              "goldLost": 82,
+              "timeDead": 28
+            },
+            {
+              "time": 859,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1144,
+              "attacker": 120,
+              "target": 123,
+              "goldFed": 459,
+              "goldLost": 116,
+              "timeDead": 32
+            },
+            {
+              "time": 1152,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 25
+            },
+            {
+              "time": 1173,
+              "attacker": 3,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 4
+            },
+            {
+              "time": 1263,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1265,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1272,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1321,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1720,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1789,
+              "attacker": 55,
+              "target": 123,
+              "goldFed": 613,
+              "goldLost": 185,
+              "timeDead": 46
+            },
+            {
+              "time": 1827,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 9
+            },
+            {
+              "time": 1869,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1875,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1904,
+              "attacker": 55,
+              "target": 123,
+              "goldFed": 607,
+              "goldLost": 192,
+              "timeDead": 46
+            },
+            {
+              "time": 1908,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 43
+            },
+            {
+              "time": 1910,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 41
+            },
+            {
+              "time": 1943,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 8
+            },
+            {
+              "time": 1962,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2224,
+              "attacker": 120,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2227,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2285,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2346,
+              "attacker": 3,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2348,
+              "attacker": 3,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2355,
+              "attacker": null,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2415,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2540,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2757,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2782,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2816,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2839,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3054,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3073,
+              "attacker": 120,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3126,
+              "attacker": 54,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3206,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3222,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3233,
+              "attacker": 120,
+              "target": 123,
+              "goldFed": 868,
+              "goldLost": 305,
+              "timeDead": 38
+            },
+            {
+              "time": 3264,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 7
+            },
+            {
+              "time": 3324,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3436,
+              "attacker": 120,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3487,
+              "attacker": 120,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3494,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3517,
+              "attacker": 9,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3553,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3758,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3778,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3812,
+              "attacker": 9,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3841,
+              "attacker": 3,
+              "target": 123,
+              "goldFed": 769,
+              "goldLost": 298,
+              "timeDead": 1
+            },
+            {
+              "time": 3850,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3862,
+              "attacker": 123,
+              "target": 123,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            }
+          ],
+          "buyBackEvents": [
+            {
+              "time": 3272
+            },
+            {
+              "time": 3842
+            }
+          ],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 8158,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 80,
+              "abilityId": 8429,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 3204,
+              "abilityId": 1569,
+              "level": 0,
+              "levelObtained": 20
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 44,
+                "charges": 6
+              },
+              "item1": {
+                "itemId": 218,
+                "charges": 1
+              },
+              "item2": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item5": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "backPack0": {
+                "itemId": 188,
+                "charges": 1
+              },
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": -56,
+              "item0": {
+                "itemId": 44,
+                "charges": 6
+              },
+              "item1": {
+                "itemId": 218,
+                "charges": 1
+              },
+              "item2": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item5": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 3852,
+              "item0": {
+                "itemId": 1,
+                "charges": 0
+              },
+              "item1": {
+                "itemId": 610,
+                "charges": 0
+              },
+              "item2": {
+                "itemId": 30,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 218,
+                "charges": 1
+              },
+              "item4": null,
+              "item5": {
+                "itemId": 29,
+                "charges": 0
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 1863,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 847565596,
+        "playerSlot": 128,
+        "heroId": 3,
+        "isRadiant": false,
+        "kills": 2,
+        "deaths": 8,
+        "assists": 20,
+        "level": 25,
+        "numLastHits": 31,
+        "numDenies": 0,
+        "heroDamage": 13767,
+        "towerDamage": 229,
+        "heroHealing": 2988,
+        "networth": 16418,
+        "item0Id": 1,
+        "item1Id": 214,
+        "item2Id": 256,
+        "item3Id": 108,
+        "item4Id": 11,
+        "item5Id": 40,
+        "backpack0Id": null,
+        "backpack1Id": null,
+        "backpack2Id": null,
+        "neutral0Id": 370,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": -89,
+              "itemId": 237
+            },
+            {
+              "time": 3702,
+              "itemId": 43
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 2,
+                "amount": 5119
+              },
+              {
+                "target": 86,
+                "amount": 3986
+              },
+              {
+                "target": 123,
+                "amount": 1248
+              },
+              {
+                "target": 74,
+                "amount": 3552
+              },
+              {
+                "target": 8,
+                "amount": 1831
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 327,
+              "amount": -15,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 787,
+              "amount": -43,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 884,
+              "amount": -51,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1038,
+              "amount": -63,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1717,
+              "amount": -114,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2056,
+              "amount": -189,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2116,
+              "amount": -193,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3194,
+              "amount": -311,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 193,
+              "attacker": 86,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 283,
+              "attacker": 86,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 327,
+              "attacker": 123,
+              "target": 3,
+              "goldFed": 245,
+              "goldLost": 15,
+              "timeDead": 18
+            },
+            {
+              "time": 329,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 17
+            },
+            {
+              "time": 388,
+              "attacker": 86,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 400,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 787,
+              "attacker": 123,
+              "target": 3,
+              "goldFed": 305,
+              "goldLost": 21,
+              "timeDead": 26
+            },
+            {
+              "time": 828,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 884,
+              "attacker": 2,
+              "target": 3,
+              "goldFed": 345,
+              "goldLost": 51,
+              "timeDead": 29
+            },
+            {
+              "time": 1038,
+              "attacker": 2,
+              "target": 3,
+              "goldFed": 381,
+              "goldLost": 63,
+              "timeDead": 30
+            },
+            {
+              "time": 1043,
+              "attacker": 123,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 26
+            },
+            {
+              "time": 1182,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1279,
+              "attacker": 123,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1343,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1407,
+              "attacker": 86,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1636,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1704,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1717,
+              "attacker": 2,
+              "target": 3,
+              "goldFed": 475,
+              "goldLost": 114,
+              "timeDead": 46
+            },
+            {
+              "time": 1730,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 34
+            },
+            {
+              "time": 1790,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1794,
+              "attacker": null,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2056,
+              "attacker": 74,
+              "target": 3,
+              "goldFed": 637,
+              "goldLost": 0,
+              "timeDead": 50
+            },
+            {
+              "time": 2116,
+              "attacker": 123,
+              "target": 3,
+              "goldFed": 633,
+              "goldLost": 0,
+              "timeDead": 50
+            },
+            {
+              "time": 2120,
+              "attacker": 74,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 47
+            },
+            {
+              "time": 2121,
+              "attacker": 2,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 46
+            },
+            {
+              "time": 2600,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2670,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2845,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2881,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3092,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3148,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3162,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3194,
+              "attacker": 8,
+              "target": 3,
+              "goldFed": 881,
+              "goldLost": 224,
+              "timeDead": 9
+            },
+            {
+              "time": 3208,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3214,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3221,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3329,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3392,
+              "attacker": 123,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3402,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3412,
+              "attacker": null,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3440,
+              "attacker": 8,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3443,
+              "attacker": 123,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3751,
+              "attacker": 74,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3759,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3767,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3802,
+              "attacker": 55,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3802,
+              "attacker": 74,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3805,
+              "attacker": 86,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3825,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3862,
+              "attacker": 3,
+              "target": 3,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            }
+          ],
+          "buyBackEvents": [
+            {
+              "time": 3204
+            }
+          ],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 5014,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 107,
+              "abilityId": 5011,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 3846,
+              "abilityId": 6609,
+              "level": 0,
+              "levelObtained": 25
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item1": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item2": {
+                "itemId": 216,
+                "charges": 2
+              },
+              "item3": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item4": {
+                "itemId": 218,
+                "charges": 1
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": {
+                "itemId": 188,
+                "charges": 1
+              },
+              "backPack1": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": -43,
+              "item0": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item1": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item2": {
+                "itemId": 216,
+                "charges": 2
+              },
+              "item3": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item4": {
+                "itemId": 218,
+                "charges": 1
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 3854,
+              "item0": {
+                "itemId": 1,
+                "charges": 0
+              },
+              "item1": {
+                "itemId": 214,
+                "charges": 1
+              },
+              "item2": {
+                "itemId": 256,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 108,
+                "charges": 0
+              },
+              "item4": {
+                "itemId": 11,
+                "charges": 0
+              },
+              "item5": {
+                "itemId": 40,
+                "charges": 1
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 370,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 321580662,
+        "playerSlot": 129,
+        "heroId": 54,
+        "isRadiant": false,
+        "kills": 7,
+        "deaths": 4,
+        "assists": 13,
+        "level": 30,
+        "numLastHits": 829,
+        "numDenies": 20,
+        "heroDamage": 34525,
+        "towerDamage": 18449,
+        "heroHealing": 1572,
+        "networth": 45071,
+        "item0Id": 151,
+        "item1Id": 135,
+        "item2Id": 208,
+        "item3Id": 225,
+        "item4Id": 112,
+        "item5Id": 156,
+        "backpack0Id": null,
+        "backpack1Id": null,
+        "backpack2Id": null,
+        "neutral0Id": 292,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 11
+            },
+            {
+              "time": -89,
+              "itemId": 13
+            },
+            {
+              "time": 3334,
+              "itemId": 156
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 2,
+                "amount": 16830
+              },
+              {
+                "target": 86,
+                "amount": 4783
+              },
+              {
+                "target": 74,
+                "amount": 22002
+              },
+              {
+                "target": 123,
+                "amount": 1143
+              },
+              {
+                "target": 8,
+                "amount": 11540
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 129,
+              "amount": -24,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 551,
+              "amount": -99,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2933,
+              "amount": -940,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3203,
+              "amount": -991,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 129,
+              "attacker": 2,
+              "target": 54,
+              "goldFed": 239,
+              "goldLost": 24,
+              "timeDead": 15
+            },
+            {
+              "time": 551,
+              "attacker": 2,
+              "target": 54,
+              "goldFed": 412,
+              "goldLost": 99,
+              "timeDead": 28
+            },
+            {
+              "time": 1539,
+              "attacker": 54,
+              "target": 54,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2372,
+              "attacker": 54,
+              "target": 54,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2933,
+              "attacker": 8,
+              "target": 54,
+              "goldFed": 2031,
+              "goldLost": 940,
+              "timeDead": 100
+            },
+            {
+              "time": 3203,
+              "attacker": 8,
+              "target": 54,
+              "goldFed": 1949,
+              "goldLost": 991,
+              "timeDead": 2
+            }
+          ],
+          "buyBackEvents": [
+            {
+              "time": 3205
+            }
+          ],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 5250,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 107,
+              "abilityId": 5251,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 3467,
+              "abilityId": 7012,
+              "level": 0,
+              "levelObtained": 29
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 13,
+                "charges": null
+              },
+              "item1": null,
+              "item2": {
+                "itemId": 13,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item4": {
+                "itemId": 13,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 11,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 59,
+              "item0": {
+                "itemId": 13,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item2": {
+                "itemId": 13,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item4": {
+                "itemId": 13,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 11,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 3643,
+              "item0": {
+                "itemId": 151,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 135,
+                "charges": 0
+              },
+              "item2": {
+                "itemId": 208,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 225,
+                "charges": 0
+              },
+              "item4": {
+                "itemId": 112,
+                "charges": 0
+              },
+              "item5": {
+                "itemId": 156,
+                "charges": 0
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 292,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 106305042,
+        "playerSlot": 130,
+        "heroId": 120,
+        "isRadiant": false,
+        "kills": 12,
+        "deaths": 4,
+        "assists": 19,
+        "level": 29,
+        "numLastHits": 573,
+        "numDenies": 13,
+        "heroDamage": 31929,
+        "towerDamage": 972,
+        "heroHealing": 0,
+        "networth": 38797,
+        "item0Id": 226,
+        "item1Id": 30,
+        "item2Id": 1097,
+        "item3Id": 110,
+        "item4Id": 1,
+        "item5Id": 208,
+        "backpack0Id": 63,
+        "backpack1Id": 41,
+        "backpack2Id": null,
+        "neutral0Id": 292,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 16
+            },
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": 3559,
+              "itemId": 110
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 74,
+                "amount": 31014
+              },
+              {
+                "target": 86,
+                "amount": 6331
+              },
+              {
+                "target": 123,
+                "amount": 5873
+              },
+              {
+                "target": 8,
+                "amount": 4653
+              },
+              {
+                "target": 2,
+                "amount": 7138
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 593,
+              "amount": -108,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 695,
+              "amount": -123,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 801,
+              "amount": -138,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3439,
+              "amount": -836,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 326,
+              "attacker": 120,
+              "target": 120,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 593,
+              "attacker": 123,
+              "target": 120,
+              "goldFed": 423,
+              "goldLost": 108,
+              "timeDead": 30
+            },
+            {
+              "time": 664,
+              "attacker": 120,
+              "target": 120,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 695,
+              "attacker": 86,
+              "target": 120,
+              "goldFed": 429,
+              "goldLost": 123,
+              "timeDead": 32
+            },
+            {
+              "time": 801,
+              "attacker": 86,
+              "target": 120,
+              "goldFed": 490,
+              "goldLost": 138,
+              "timeDead": 34
+            },
+            {
+              "time": 3439,
+              "attacker": 2,
+              "target": 120,
+              "goldFed": 1941,
+              "goldLost": 836,
+              "timeDead": 4
+            }
+          ],
+          "buyBackEvents": [
+            {
+              "time": 3444
+            }
+          ],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 6344,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 75,
+              "abilityId": 6461,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 3473,
+              "abilityId": 9135,
+              "level": 0,
+              "levelObtained": 28
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 11,
+                "charges": null
+              },
+              "backPack0": {
+                "itemId": 42,
+                "charges": 1
+              },
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": -60,
+              "item0": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 42,
+                "charges": 1
+              },
+              "item5": {
+                "itemId": 11,
+                "charges": null
+              },
+              "backPack0": {
+                "itemId": 16,
+                "charges": 0
+              },
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 3680,
+              "item0": {
+                "itemId": 226,
+                "charges": 0
+              },
+              "item1": {
+                "itemId": 30,
+                "charges": 0
+              },
+              "item2": {
+                "itemId": 1097,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 110,
+                "charges": 0
+              },
+              "item4": {
+                "itemId": 1,
+                "charges": 0
+              },
+              "item5": {
+                "itemId": 208,
+                "charges": 0
+              },
+              "backPack0": {
+                "itemId": 63,
+                "charges": 0
+              },
+              "backPack1": {
+                "itemId": 41,
+                "charges": 0
+              },
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 292,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 218231587,
+        "playerSlot": 131,
+        "heroId": 9,
+        "isRadiant": false,
+        "kills": 2,
+        "deaths": 10,
+        "assists": 25,
+        "level": 25,
+        "numLastHits": 200,
+        "numDenies": 0,
+        "heroDamage": 22131,
+        "towerDamage": 493,
+        "heroHealing": 2309,
+        "networth": 18157,
+        "item0Id": 1852,
+        "item1Id": 610,
+        "item2Id": 256,
+        "item3Id": 43,
+        "item4Id": 108,
+        "item5Id": 29,
+        "backpack0Id": 40,
+        "backpack1Id": null,
+        "backpack2Id": null,
+        "neutral0Id": 1864,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": -89,
+              "itemId": 20
+            },
+            {
+              "time": 3581,
+              "itemId": 46
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 2,
+                "amount": 4924
+              },
+              {
+                "target": 123,
+                "amount": 4554
+              },
+              {
+                "target": 8,
+                "amount": 4344
+              },
+              {
+                "target": 86,
+                "amount": 6051
+              },
+              {
+                "target": 74,
+                "amount": 15292
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 79,
+              "amount": -18,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 722,
+              "amount": -61,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 862,
+              "amount": -79,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1053,
+              "amount": -101,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1170,
+              "amount": -112,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1902,
+              "amount": -172,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2953,
+              "amount": -356,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3220,
+              "amount": -393,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3348,
+              "amount": -395,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3779,
+              "amount": -473,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 79,
+              "attacker": 123,
+              "target": 9,
+              "goldFed": 376,
+              "goldLost": 18,
+              "timeDead": 12
+            },
+            {
+              "time": 447,
+              "attacker": 123,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 675,
+              "attacker": 86,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 722,
+              "attacker": 123,
+              "target": 9,
+              "goldFed": 329,
+              "goldLost": 46,
+              "timeDead": 26
+            },
+            {
+              "time": 735,
+              "attacker": 123,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 14
+            },
+            {
+              "time": 751,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 802,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 862,
+              "attacker": 2,
+              "target": 9,
+              "goldFed": 381,
+              "goldLost": 62,
+              "timeDead": 30
+            },
+            {
+              "time": 890,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 3
+            },
+            {
+              "time": 1053,
+              "attacker": 8,
+              "target": 9,
+              "goldFed": 405,
+              "goldLost": 101,
+              "timeDead": 34
+            },
+            {
+              "time": 1057,
+              "attacker": 123,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 31
+            },
+            {
+              "time": 1078,
+              "attacker": 123,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 10
+            },
+            {
+              "time": 1085,
+              "attacker": 123,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 3
+            },
+            {
+              "time": 1122,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1170,
+              "attacker": 2,
+              "target": 9,
+              "goldFed": 435,
+              "goldLost": 112,
+              "timeDead": 34
+            },
+            {
+              "time": 1363,
+              "attacker": 2,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1402,
+              "attacker": 123,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1464,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1524,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1559,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1807,
+              "attacker": 74,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1826,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1902,
+              "attacker": 2,
+              "target": 9,
+              "goldFed": 585,
+              "goldLost": 50,
+              "timeDead": 46
+            },
+            {
+              "time": 1911,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 38
+            },
+            {
+              "time": 1927,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 22
+            },
+            {
+              "time": 1929,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 20
+            },
+            {
+              "time": 1983,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2219,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2315,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2335,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2387,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2428,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2485,
+              "attacker": 74,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2489,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2653,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2941,
+              "attacker": 8,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2942,
+              "attacker": 74,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2950,
+              "attacker": null,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2953,
+              "attacker": 8,
+              "target": 9,
+              "goldFed": 978,
+              "goldLost": 356,
+              "timeDead": 80
+            },
+            {
+              "time": 2996,
+              "attacker": 2,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 38
+            },
+            {
+              "time": 3220,
+              "attacker": 123,
+              "target": 9,
+              "goldFed": 981,
+              "goldLost": 393,
+              "timeDead": 85
+            },
+            {
+              "time": 3268,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 38
+            },
+            {
+              "time": 3348,
+              "attacker": 8,
+              "target": 9,
+              "goldFed": 1006,
+              "goldLost": 395,
+              "timeDead": 85
+            },
+            {
+              "time": 3349,
+              "attacker": 86,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 85
+            },
+            {
+              "time": 3513,
+              "attacker": 74,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3553,
+              "attacker": 123,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3686,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3747,
+              "attacker": 9,
+              "target": 9,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3779,
+              "attacker": 8,
+              "target": 9,
+              "goldFed": 1149,
+              "goldLost": 473,
+              "timeDead": 8
+            }
+          ],
+          "buyBackEvents": [
+            {
+              "time": 3788
+            }
+          ],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 5048,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 107,
+              "abilityId": 5050,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 3842,
+              "abilityId": 6242,
+              "level": 0,
+              "levelObtained": 25
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 44,
+                "charges": 6
+              },
+              "item1": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item2": {
+                "itemId": 43,
+                "charges": 1
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": -79,
+              "item0": {
+                "itemId": 44,
+                "charges": 6
+              },
+              "item1": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item2": {
+                "itemId": 16,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": {
+                "itemId": 43,
+                "charges": 1
+              },
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 3851,
+              "item0": {
+                "itemId": 1852,
+                "charges": 4
+              },
+              "item1": {
+                "itemId": 610,
+                "charges": 0
+              },
+              "item2": {
+                "itemId": 256,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 43,
+                "charges": 2
+              },
+              "item4": {
+                "itemId": 108,
+                "charges": 0
+              },
+              "item5": {
+                "itemId": 29,
+                "charges": null
+              },
+              "backPack0": {
+                "itemId": 40,
+                "charges": 1
+              },
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 1864,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 302214028,
+        "playerSlot": 132,
+        "heroId": 55,
+        "isRadiant": false,
+        "kills": 11,
+        "deaths": 5,
+        "assists": 17,
+        "level": 29,
+        "numLastHits": 643,
+        "numDenies": 3,
+        "heroDamage": 35322,
+        "towerDamage": 1255,
+        "heroHealing": 0,
+        "networth": 40601,
+        "item0Id": 119,
+        "item1Id": 600,
+        "item2Id": 96,
+        "item3Id": 220,
+        "item4Id": 110,
+        "item5Id": 256,
+        "backpack0Id": 226,
+        "backpack1Id": 116,
+        "backpack2Id": null,
+        "neutral0Id": 1718,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 20
+            },
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": 3850,
+              "itemId": 220
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 8,
+                "amount": 10721
+              },
+              {
+                "target": 123,
+                "amount": 5958
+              },
+              {
+                "target": 86,
+                "amount": 4337
+              },
+              {
+                "target": 74,
+                "amount": 21387
+              },
+              {
+                "target": 2,
+                "amount": 13432
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 232,
+              "amount": -35,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 382,
+              "amount": -54,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1996,
+              "amount": -530,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3175,
+              "amount": -890,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 3844,
+              "amount": -1117,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 232,
+              "attacker": 8,
+              "target": 55,
+              "goldFed": 261,
+              "goldLost": 35,
+              "timeDead": 18
+            },
+            {
+              "time": 382,
+              "attacker": 123,
+              "target": 55,
+              "goldFed": 301,
+              "goldLost": 54,
+              "timeDead": 24
+            },
+            {
+              "time": 675,
+              "attacker": 123,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 805,
+              "attacker": 55,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 857,
+              "attacker": 55,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 872,
+              "attacker": 123,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 949,
+              "attacker": 2,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 994,
+              "attacker": 123,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1087,
+              "attacker": 55,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1181,
+              "attacker": 8,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1281,
+              "attacker": 86,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1355,
+              "attacker": 74,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1474,
+              "attacker": 55,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1516,
+              "attacker": 123,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1631,
+              "attacker": 8,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1721,
+              "attacker": 8,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1830,
+              "attacker": 8,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1913,
+              "attacker": 55,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1960,
+              "attacker": 55,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 1996,
+              "attacker": 2,
+              "target": 55,
+              "goldFed": 1322,
+              "goldLost": 530,
+              "timeDead": 70
+            },
+            {
+              "time": 2001,
+              "attacker": null,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 66
+            },
+            {
+              "time": 2169,
+              "attacker": null,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2317,
+              "attacker": 55,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2320,
+              "attacker": 2,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2411,
+              "attacker": null,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2527,
+              "attacker": 74,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2533,
+              "attacker": 55,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2549,
+              "attacker": null,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2644,
+              "attacker": null,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 2782,
+              "attacker": 74,
+              "target": 55,
+              "goldFed": 0,
+              "goldLost": 0,
+              "timeDead": 0
+            },
+            {
+              "time": 3175,
+              "attacker": 2,
+              "target": 55,
+              "goldFed": 1785,
+              "goldLost": 890,
+              "timeDead": 16
+            },
+            {
+              "time": 3844,
+              "attacker": null,
+              "target": 55,
+              "goldFed": 2552,
+              "goldLost": 1117,
+              "timeDead": 3
+            }
+          ],
+          "buyBackEvents": [
+            {
+              "time": 3192
+            },
+            {
+              "time": 3848
+            }
+          ],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 5256,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 95,
+              "abilityId": 5257,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 3234,
+              "abilityId": 736,
+              "level": 0,
+              "levelObtained": 28
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item2": {
+                "itemId": 11,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 15,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 52,
+              "item0": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item2": {
+                "itemId": 11,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 15,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": {
+                "itemId": 43,
+                "charges": 1
+              },
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 3851,
+              "item0": {
+                "itemId": 119,
+                "charges": 0
+              },
+              "item1": {
+                "itemId": 600,
+                "charges": 0
+              },
+              "item2": {
+                "itemId": 96,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 220,
+                "charges": 0
+              },
+              "item4": {
+                "itemId": 110,
+                "charges": 0
+              },
+              "item5": {
+                "itemId": 256,
+                "charges": 0
+              },
+              "backPack0": {
+                "itemId": 226,
+                "charges": 0
+              },
+              "backPack1": {
+                "itemId": 116,
+                "charges": 0
+              },
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 1718,
+                "charges": null
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "fixture_scope": "Live selected source facts; DEATH gold only; inventory/purchase/upgrade samples truncated. Not a complete event history."
+  }
+}

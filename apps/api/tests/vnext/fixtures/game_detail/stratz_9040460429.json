@@ -1,0 +1,3270 @@
+{
+  "match_id": 9040460429,
+  "provider": "stratz",
+  "retrieved_at": "2026-10-18T08:26:23.296935Z",
+  "data": {
+    "id": 9040460429,
+    "startDateTime": 1791738028,
+    "durationSeconds": 2904,
+    "didRadiantWin": false,
+    "gameVersionId": 190,
+    "firstBloodTime": -23,
+    "radiantTeamId": 7119388,
+    "direTeamId": 9823272,
+    "radiantTeam": {
+      "id": 7119388,
+      "name": "Team Spirit"
+    },
+    "direTeam": {
+      "id": 9823272,
+      "name": "Team Yandex"
+    },
+    "pickBans": [
+      {
+        "order": 0,
+        "isPick": false,
+        "heroId": 59,
+        "bannedHeroId": 59,
+        "isRadiant": true
+      },
+      {
+        "order": 1,
+        "isPick": false,
+        "heroId": 62,
+        "bannedHeroId": 62,
+        "isRadiant": false
+      },
+      {
+        "order": 2,
+        "isPick": false,
+        "heroId": 123,
+        "bannedHeroId": 123,
+        "isRadiant": false
+      },
+      {
+        "order": 3,
+        "isPick": false,
+        "heroId": 80,
+        "bannedHeroId": 80,
+        "isRadiant": true
+      },
+      {
+        "order": 4,
+        "isPick": false,
+        "heroId": 105,
+        "bannedHeroId": 105,
+        "isRadiant": false
+      },
+      {
+        "order": 5,
+        "isPick": false,
+        "heroId": 107,
+        "bannedHeroId": 107,
+        "isRadiant": false
+      },
+      {
+        "order": 6,
+        "isPick": false,
+        "heroId": 93,
+        "bannedHeroId": 93,
+        "isRadiant": true
+      },
+      {
+        "order": 7,
+        "isPick": true,
+        "heroId": 112,
+        "bannedHeroId": null,
+        "isRadiant": true
+      },
+      {
+        "order": 8,
+        "isPick": true,
+        "heroId": 53,
+        "bannedHeroId": null,
+        "isRadiant": false
+      },
+      {
+        "order": 9,
+        "isPick": false,
+        "heroId": 36,
+        "bannedHeroId": 36,
+        "isRadiant": true
+      },
+      {
+        "order": 10,
+        "isPick": false,
+        "heroId": 47,
+        "bannedHeroId": 47,
+        "isRadiant": true
+      },
+      {
+        "order": 11,
+        "isPick": false,
+        "heroId": 77,
+        "bannedHeroId": 77,
+        "isRadiant": false
+      },
+      {
+        "order": 12,
+        "isPick": true,
+        "heroId": 119,
+        "bannedHeroId": null,
+        "isRadiant": false
+      },
+      {
+        "order": 13,
+        "isPick": true,
+        "heroId": 16,
+        "bannedHeroId": null,
+        "isRadiant": true
+      },
+      {
+        "order": 14,
+        "isPick": true,
+        "heroId": 21,
+        "bannedHeroId": null,
+        "isRadiant": true
+      },
+      {
+        "order": 15,
+        "isPick": true,
+        "heroId": 120,
+        "bannedHeroId": null,
+        "isRadiant": false
+      },
+      {
+        "order": 16,
+        "isPick": true,
+        "heroId": 50,
+        "bannedHeroId": null,
+        "isRadiant": false
+      },
+      {
+        "order": 17,
+        "isPick": true,
+        "heroId": 1,
+        "bannedHeroId": null,
+        "isRadiant": true
+      },
+      {
+        "order": 18,
+        "isPick": false,
+        "heroId": 28,
+        "bannedHeroId": 28,
+        "isRadiant": true
+      },
+      {
+        "order": 19,
+        "isPick": false,
+        "heroId": 98,
+        "bannedHeroId": 98,
+        "isRadiant": false
+      },
+      {
+        "order": 20,
+        "isPick": false,
+        "heroId": 135,
+        "bannedHeroId": 135,
+        "isRadiant": false
+      },
+      {
+        "order": 21,
+        "isPick": false,
+        "heroId": 106,
+        "bannedHeroId": 106,
+        "isRadiant": true
+      },
+      {
+        "order": 22,
+        "isPick": true,
+        "heroId": 55,
+        "bannedHeroId": null,
+        "isRadiant": true
+      },
+      {
+        "order": 23,
+        "isPick": true,
+        "heroId": 114,
+        "bannedHeroId": null,
+        "isRadiant": false
+      }
+    ],
+    "chatEvents": [
+      {
+        "time": -86,
+        "type": 1000,
+        "fromHeroId": 21,
+        "toHeroId": 114,
+        "value": 50,
+        "isRadiant": false
+      },
+      {
+        "time": -86,
+        "type": 1000,
+        "fromHeroId": 114,
+        "toHeroId": 21,
+        "value": 50,
+        "isRadiant": false
+      },
+      {
+        "time": -24,
+        "type": 5,
+        "fromHeroId": 50,
+        "toHeroId": null,
+        "value": 302,
+        "isRadiant": false
+      },
+      {
+        "time": 112,
+        "type": 34,
+        "fromHeroId": 53,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 112,
+        "type": 36,
+        "fromHeroId": 120,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 369,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": true
+      },
+      {
+        "time": 387,
+        "type": 10,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 462,
+        "type": 11,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 468,
+        "type": 3,
+        "fromHeroId": 114,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 498,
+        "type": 11,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": true
+      },
+      {
+        "time": 529,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": true
+      },
+      {
+        "time": 581,
+        "type": 3,
+        "fromHeroId": 53,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 624,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 640,
+        "type": 3,
+        "fromHeroId": 16,
+        "toHeroId": null,
+        "value": 2,
+        "isRadiant": false
+      },
+      {
+        "time": 961,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 1044,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": true
+      },
+      {
+        "time": 1235,
+        "type": 114,
+        "fromHeroId": 112,
+        "toHeroId": null,
+        "value": 9,
+        "isRadiant": false
+      },
+      {
+        "time": 1326,
+        "type": 114,
+        "fromHeroId": 112,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 1582,
+        "type": 3,
+        "fromHeroId": 21,
+        "toHeroId": null,
+        "value": 2,
+        "isRadiant": false
+      },
+      {
+        "time": 1659,
+        "type": 3,
+        "fromHeroId": 114,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 1856,
+        "type": 11,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": true
+      },
+      {
+        "time": 1911,
+        "type": 3,
+        "fromHeroId": 112,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 1976,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 1983,
+        "type": 117,
+        "fromHeroId": 119,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 2054,
+        "type": 3,
+        "fromHeroId": 55,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 2165,
+        "type": 3,
+        "fromHeroId": 1,
+        "toHeroId": null,
+        "value": 2,
+        "isRadiant": false
+      },
+      {
+        "time": 2180,
+        "type": 11,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": true
+      },
+      {
+        "time": 2189,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": true
+      },
+      {
+        "time": 2199,
+        "type": 3,
+        "fromHeroId": 50,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 2211,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": true
+      },
+      {
+        "time": 2230,
+        "type": 3,
+        "fromHeroId": 55,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 2452,
+        "type": 3,
+        "fromHeroId": 114,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 2487,
+        "type": 3,
+        "fromHeroId": 16,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 2853,
+        "type": 1000,
+        "fromHeroId": 120,
+        "toHeroId": 50,
+        "value": 50,
+        "isRadiant": false
+      },
+      {
+        "time": 2861,
+        "type": 28,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 2867,
+        "type": 119,
+        "fromHeroId": 21,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 2874,
+        "type": 12,
+        "fromHeroId": null,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": true
+      },
+      {
+        "time": 2883,
+        "type": 3,
+        "fromHeroId": 1,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 2884,
+        "type": 3,
+        "fromHeroId": 1,
+        "toHeroId": null,
+        "value": 3,
+        "isRadiant": false
+      },
+      {
+        "time": 2901,
+        "type": 1000,
+        "fromHeroId": 114,
+        "toHeroId": 53,
+        "value": 50,
+        "isRadiant": false
+      },
+      {
+        "time": 2904,
+        "type": 15,
+        "fromHeroId": 21,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 2904,
+        "type": 15,
+        "fromHeroId": 114,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 2904,
+        "type": 15,
+        "fromHeroId": 16,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 2904,
+        "type": 15,
+        "fromHeroId": 50,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 2904,
+        "type": 15,
+        "fromHeroId": 55,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 2904,
+        "type": 15,
+        "fromHeroId": 112,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 2904,
+        "type": 15,
+        "fromHeroId": 120,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 2904,
+        "type": 15,
+        "fromHeroId": 53,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 2904,
+        "type": 15,
+        "fromHeroId": 119,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      },
+      {
+        "time": 2904,
+        "type": 15,
+        "fromHeroId": 1,
+        "toHeroId": null,
+        "value": 0,
+        "isRadiant": false
+      }
+    ],
+    "players": [
+      {
+        "steamAccountId": 847565596,
+        "playerSlot": 0,
+        "heroId": 112,
+        "isRadiant": true,
+        "kills": 2,
+        "deaths": 7,
+        "assists": 7,
+        "level": 19,
+        "numLastHits": 60,
+        "numDenies": 4,
+        "heroDamage": 11505,
+        "towerDamage": 0,
+        "heroHealing": 1929,
+        "networth": 8303,
+        "item0Id": 1,
+        "item1Id": 1872,
+        "item2Id": 37,
+        "item3Id": 29,
+        "item4Id": 244,
+        "item5Id": 102,
+        "backpack0Id": 188,
+        "backpack1Id": null,
+        "backpack2Id": null,
+        "neutral0Id": 840,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": -89,
+              "itemId": 1123
+            },
+            {
+              "time": 2864,
+              "itemId": 102
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 50,
+                "amount": 506
+              },
+              {
+                "target": 114,
+                "amount": 4065
+              },
+              {
+                "target": 119,
+                "amount": 2965
+              },
+              {
+                "target": 53,
+                "amount": 1669
+              },
+              {
+                "target": 120,
+                "amount": 2300
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 446,
+              "amount": -24,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 623,
+              "amount": -43,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1003,
+              "amount": -59,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1852,
+              "amount": -144,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2162,
+              "amount": -176,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2600,
+              "amount": -231,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2843,
+              "amount": -207,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 446,
+              "attacker": 53,
+              "target": 112,
+              "goldFed": 265,
+              "goldLost": 24,
+              "timeDead": 21
+            },
+            {
+              "time": 623,
+              "attacker": 53,
+              "target": 112,
+              "goldFed": 329,
+              "goldLost": 36,
+              "timeDead": 24
+            },
+            {
+              "time": 1003,
+              "attacker": 119,
+              "target": 112,
+              "goldFed": 348,
+              "goldLost": 18,
+              "timeDead": 30
+            },
+            {
+              "time": 1852,
+              "attacker": 114,
+              "target": 112,
+              "goldFed": 487,
+              "goldLost": 144,
+              "timeDead": 46
+            },
+            {
+              "time": 2162,
+              "attacker": 53,
+              "target": 112,
+              "goldFed": 541,
+              "goldLost": 176,
+              "timeDead": 50
+            },
+            {
+              "time": 2600,
+              "attacker": 120,
+              "target": 112,
+              "goldFed": 597,
+              "goldLost": 231,
+              "timeDead": 27
+            },
+            {
+              "time": 2843,
+              "attacker": 120,
+              "target": 112,
+              "goldFed": 569,
+              "goldLost": 207,
+              "timeDead": 60
+            }
+          ],
+          "buyBackEvents": [
+            {
+              "time": 2627
+            }
+          ],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 5651,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 103,
+              "abilityId": 5653,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 2565,
+              "abilityId": 684,
+              "level": 0,
+              "levelObtained": 18
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item1": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item2": {
+                "itemId": 188,
+                "charges": 1
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "backPack0": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "backPack1": {
+                "itemId": 218,
+                "charges": 1
+              },
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 1850,
+                "charges": 1
+              }
+            },
+            {
+              "time": -83,
+              "item0": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item1": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item2": null,
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "backPack0": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "backPack1": {
+                "itemId": 218,
+                "charges": 1
+              },
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 1850,
+                "charges": 1
+              }
+            },
+            {
+              "time": 2865,
+              "item0": {
+                "itemId": 1,
+                "charges": 0
+              },
+              "item1": {
+                "itemId": 1872,
+                "charges": 0
+              },
+              "item2": {
+                "itemId": 37,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 29,
+                "charges": 0
+              },
+              "item4": {
+                "itemId": 244,
+                "charges": 0
+              },
+              "item5": {
+                "itemId": 102,
+                "charges": 0
+              },
+              "backPack0": {
+                "itemId": 188,
+                "charges": 1
+              },
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 840,
+                "charges": 0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 321580662,
+        "playerSlot": 1,
+        "heroId": 1,
+        "isRadiant": true,
+        "kills": 3,
+        "deaths": 6,
+        "assists": 4,
+        "level": 25,
+        "numLastHits": 605,
+        "numDenies": 3,
+        "heroDamage": 14456,
+        "towerDamage": 686,
+        "heroHealing": 0,
+        "networth": 26064,
+        "item0Id": 208,
+        "item1Id": 63,
+        "item2Id": 116,
+        "item3Id": 139,
+        "item4Id": 147,
+        "item5Id": 145,
+        "backpack0Id": null,
+        "backpack1Id": null,
+        "backpack2Id": null,
+        "neutral0Id": 1643,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 11
+            },
+            {
+              "time": -89,
+              "itemId": 14
+            },
+            {
+              "time": 2788,
+              "itemId": 208
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 114,
+                "amount": 6309
+              },
+              {
+                "target": 119,
+                "amount": 2474
+              },
+              {
+                "target": 50,
+                "amount": 1517
+              },
+              {
+                "target": 53,
+                "amount": 2037
+              },
+              {
+                "target": 120,
+                "amount": 2119
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 814,
+              "amount": -116,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1833,
+              "amount": -418,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2169,
+              "amount": -527,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2288,
+              "amount": -523,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2454,
+              "amount": -540,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2891,
+              "amount": -665,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 814,
+              "attacker": 120,
+              "target": 1,
+              "goldFed": 433,
+              "goldLost": 88,
+              "timeDead": 29
+            },
+            {
+              "time": 1833,
+              "attacker": 114,
+              "target": 1,
+              "goldFed": 935,
+              "goldLost": 108,
+              "timeDead": 75
+            },
+            {
+              "time": 2169,
+              "attacker": 53,
+              "target": 1,
+              "goldFed": 979,
+              "goldLost": 397,
+              "timeDead": 85
+            },
+            {
+              "time": 2288,
+              "attacker": 114,
+              "target": 1,
+              "goldFed": 937,
+              "goldLost": 523,
+              "timeDead": 85
+            },
+            {
+              "time": 2454,
+              "attacker": 53,
+              "target": 1,
+              "goldFed": 913,
+              "goldLost": 475,
+              "timeDead": 90
+            },
+            {
+              "time": 2891,
+              "attacker": 53,
+              "target": 1,
+              "goldFed": 1055,
+              "goldLost": 573,
+              "timeDead": 12
+            }
+          ],
+          "buyBackEvents": [],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 5003,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 104,
+              "abilityId": 5004,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 2746,
+              "abilityId": 6353,
+              "level": 0,
+              "levelObtained": 25
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item1": {
+                "itemId": 14,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 11,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 7,
+              "item0": {
+                "itemId": 20,
+                "charges": 0
+              },
+              "item1": {
+                "itemId": 14,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 11,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 2892,
+              "item0": {
+                "itemId": 208,
+                "charges": 0
+              },
+              "item1": {
+                "itemId": 63,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 116,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 139,
+                "charges": 0
+              },
+              "item4": {
+                "itemId": 147,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 145,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 1643,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 106305042,
+        "playerSlot": 2,
+        "heroId": 16,
+        "isRadiant": true,
+        "kills": 6,
+        "deaths": 7,
+        "assists": 8,
+        "level": 24,
+        "numLastHits": 379,
+        "numDenies": 4,
+        "heroDamage": 23575,
+        "towerDamage": 138,
+        "heroHealing": 0,
+        "networth": 20698,
+        "item0Id": 143,
+        "item1Id": 108,
+        "item2Id": 116,
+        "item3Id": 50,
+        "item4Id": 1,
+        "item5Id": 119,
+        "backpack0Id": 41,
+        "backpack1Id": null,
+        "backpack2Id": null,
+        "neutral0Id": 1720,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 16
+            },
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": 2718,
+              "itemId": 143
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 120,
+                "amount": 3314
+              },
+              {
+                "target": 119,
+                "amount": 6798
+              },
+              {
+                "target": 50,
+                "amount": 7752
+              },
+              {
+                "target": 114,
+                "amount": 5212
+              },
+              {
+                "target": 53,
+                "amount": 499
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 695,
+              "amount": -130,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1046,
+              "amount": -192,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1844,
+              "amount": -354,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1960,
+              "amount": -366,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2173,
+              "amount": -408,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2692,
+              "amount": -512,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2839,
+              "amount": -516,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 695,
+              "attacker": 120,
+              "target": 16,
+              "goldFed": 473,
+              "goldLost": 130,
+              "timeDead": 32
+            },
+            {
+              "time": 1046,
+              "attacker": 50,
+              "target": 16,
+              "goldFed": 557,
+              "goldLost": 192,
+              "timeDead": 44
+            },
+            {
+              "time": 1844,
+              "attacker": 114,
+              "target": 16,
+              "goldFed": 819,
+              "goldLost": 354,
+              "timeDead": 65
+            },
+            {
+              "time": 1960,
+              "attacker": 53,
+              "target": 16,
+              "goldFed": 808,
+              "goldLost": 243,
+              "timeDead": 71
+            },
+            {
+              "time": 2173,
+              "attacker": 53,
+              "target": 16,
+              "goldFed": 863,
+              "goldLost": 277,
+              "timeDead": 80
+            },
+            {
+              "time": 2692,
+              "attacker": 53,
+              "target": 16,
+              "goldFed": 947,
+              "goldLost": 512,
+              "timeDead": 95
+            },
+            {
+              "time": 2839,
+              "attacker": 114,
+              "target": 16,
+              "goldFed": 972,
+              "goldLost": 64,
+              "timeDead": 64
+            }
+          ],
+          "buyBackEvents": [],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 1229,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 55,
+              "abilityId": 5103,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 2114,
+              "abilityId": 6207,
+              "level": 0,
+              "levelObtained": 20
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": -70,
+              "item0": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 16,
+                "charges": 0
+              },
+              "item5": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 2840,
+              "item0": {
+                "itemId": 143,
+                "charges": 0
+              },
+              "item1": {
+                "itemId": 108,
+                "charges": 0
+              },
+              "item2": {
+                "itemId": 116,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 50,
+                "charges": 0
+              },
+              "item4": {
+                "itemId": 1,
+                "charges": 0
+              },
+              "item5": {
+                "itemId": 119,
+                "charges": 0
+              },
+              "backPack0": {
+                "itemId": 41,
+                "charges": 3
+              },
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 1720,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 218231587,
+        "playerSlot": 3,
+        "heroId": 21,
+        "isRadiant": true,
+        "kills": 2,
+        "deaths": 11,
+        "assists": 8,
+        "level": 17,
+        "numLastHits": 92,
+        "numDenies": 0,
+        "heroDamage": 7873,
+        "towerDamage": 514,
+        "heroHealing": 0,
+        "networth": 8096,
+        "item0Id": 1,
+        "item1Id": 1852,
+        "item2Id": 11,
+        "item3Id": null,
+        "item4Id": 36,
+        "item5Id": 29,
+        "backpack0Id": null,
+        "backpack1Id": null,
+        "backpack2Id": null,
+        "neutral0Id": 1643,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 20
+            },
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": 2797,
+              "itemId": 43
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 50,
+                "amount": 913
+              },
+              {
+                "target": 119,
+                "amount": 2621
+              },
+              {
+                "target": 114,
+                "amount": 2977
+              },
+              {
+                "target": 120,
+                "amount": 888
+              },
+              {
+                "target": 53,
+                "amount": 474
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 505,
+              "amount": -30,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1054,
+              "amount": -70,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1589,
+              "amount": -131,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1656,
+              "amount": -135,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1868,
+              "amount": -152,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2165,
+              "amount": -181,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2229,
+              "amount": -179,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2673,
+              "amount": -212,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2700,
+              "amount": -208,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2834,
+              "amount": -209,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2895,
+              "amount": -207,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 505,
+              "attacker": 119,
+              "target": 21,
+              "goldFed": 276,
+              "goldLost": 30,
+              "timeDead": 24
+            },
+            {
+              "time": 1054,
+              "attacker": 53,
+              "target": 21,
+              "goldFed": 368,
+              "goldLost": 55,
+              "timeDead": 32
+            },
+            {
+              "time": 1589,
+              "attacker": 53,
+              "target": 21,
+              "goldFed": 482,
+              "goldLost": 0,
+              "timeDead": 44
+            },
+            {
+              "time": 1656,
+              "attacker": 119,
+              "target": 21,
+              "goldFed": 473,
+              "goldLost": 21,
+              "timeDead": 44
+            },
+            {
+              "time": 1868,
+              "attacker": 53,
+              "target": 21,
+              "goldFed": 504,
+              "goldLost": 152,
+              "timeDead": 48
+            },
+            {
+              "time": 2165,
+              "attacker": 120,
+              "target": 21,
+              "goldFed": 545,
+              "goldLost": 181,
+              "timeDead": 50
+            },
+            {
+              "time": 2229,
+              "attacker": 114,
+              "target": 21,
+              "goldFed": 521,
+              "goldLost": 0,
+              "timeDead": 50
+            },
+            {
+              "time": 2673,
+              "attacker": 114,
+              "target": 21,
+              "goldFed": 522,
+              "goldLost": 212,
+              "timeDead": 5
+            },
+            {
+              "time": 2700,
+              "attacker": 120,
+              "target": 21,
+              "goldFed": 535,
+              "goldLost": 208,
+              "timeDead": 79
+            },
+            {
+              "time": 2834,
+              "attacker": 120,
+              "target": 21,
+              "goldFed": 581,
+              "goldLost": 209,
+              "timeDead": 54
+            },
+            {
+              "time": 2895,
+              "attacker": 114,
+              "target": 21,
+              "goldFed": 533,
+              "goldLost": 207,
+              "timeDead": 8
+            }
+          ],
+          "buyBackEvents": [
+            {
+              "time": 2678
+            }
+          ],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 5131,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 132,
+              "abilityId": 5132,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 2667,
+              "abilityId": 6562,
+              "level": 0,
+              "levelObtained": 16
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item1": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item2": {
+                "itemId": 11,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 218,
+                "charges": 1
+              },
+              "item4": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "backPack0": null,
+              "backPack1": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": -83,
+              "item0": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item1": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item2": {
+                "itemId": 11,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 218,
+                "charges": 1
+              },
+              "item4": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "backPack0": {
+                "itemId": 188,
+                "charges": 1
+              },
+              "backPack1": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 2896,
+              "item0": {
+                "itemId": 1,
+                "charges": 0
+              },
+              "item1": {
+                "itemId": 1852,
+                "charges": 1
+              },
+              "item2": {
+                "itemId": 11,
+                "charges": null
+              },
+              "item3": null,
+              "item4": {
+                "itemId": 36,
+                "charges": 6
+              },
+              "item5": {
+                "itemId": 29,
+                "charges": 0
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 1643,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 140835095,
+        "playerSlot": 4,
+        "heroId": 55,
+        "isRadiant": true,
+        "kills": 4,
+        "deaths": 2,
+        "assists": 6,
+        "level": 25,
+        "numLastHits": 644,
+        "numDenies": 3,
+        "heroDamage": 29009,
+        "towerDamage": 965,
+        "heroHealing": 0,
+        "networth": 27545,
+        "item0Id": 116,
+        "item1Id": 110,
+        "item2Id": 119,
+        "item3Id": 96,
+        "item4Id": 1,
+        "item5Id": 1856,
+        "backpack0Id": null,
+        "backpack1Id": null,
+        "backpack2Id": null,
+        "neutral0Id": 1873,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 11
+            },
+            {
+              "time": -89,
+              "itemId": 15
+            },
+            {
+              "time": 2762,
+              "itemId": 96
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 50,
+                "amount": 2756
+              },
+              {
+                "target": 53,
+                "amount": 8349
+              },
+              {
+                "target": 119,
+                "amount": 4645
+              },
+              {
+                "target": 120,
+                "amount": 5188
+              },
+              {
+                "target": 114,
+                "amount": 7587
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 2841,
+              "amount": -767,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2901,
+              "amount": -690,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 2841,
+              "attacker": 53,
+              "target": 55,
+              "goldFed": 1320,
+              "goldLost": 767,
+              "timeDead": 15
+            },
+            {
+              "time": 2901,
+              "attacker": 53,
+              "target": 55,
+              "goldFed": 1085,
+              "goldLost": 87,
+              "timeDead": 2
+            }
+          ],
+          "buyBackEvents": [
+            {
+              "time": 2856
+            }
+          ],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 5256,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 96,
+              "abilityId": 5257,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 2804,
+              "abilityId": 6624,
+              "level": 0,
+              "levelObtained": 25
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 15,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item2": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 11,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 8,
+              "item0": {
+                "itemId": 77,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item2": null,
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 11,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 2902,
+              "item0": {
+                "itemId": 116,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 110,
+                "charges": 0
+              },
+              "item2": {
+                "itemId": 119,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 96,
+                "charges": 0
+              },
+              "item4": {
+                "itemId": 1,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 1856,
+                "charges": 0
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 1873,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 171262902,
+        "playerSlot": 128,
+        "heroId": 53,
+        "isRadiant": false,
+        "kills": 14,
+        "deaths": 0,
+        "assists": 14,
+        "level": 29,
+        "numLastHits": 828,
+        "numDenies": 13,
+        "heroDamage": 47076,
+        "towerDamage": 22588,
+        "heroHealing": 0,
+        "networth": 49673,
+        "item0Id": 263,
+        "item1Id": 158,
+        "item2Id": 135,
+        "item3Id": 116,
+        "item4Id": 156,
+        "item5Id": 141,
+        "backpack0Id": null,
+        "backpack1Id": null,
+        "backpack2Id": null,
+        "neutral0Id": 2190,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 20
+            },
+            {
+              "time": -89,
+              "itemId": 16
+            },
+            {
+              "time": 2746,
+              "itemId": 247
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 21,
+                "amount": 8260
+              },
+              {
+                "target": 55,
+                "amount": 13192
+              },
+              {
+                "target": 16,
+                "amount": 6758
+              },
+              {
+                "target": 112,
+                "amount": 7395
+              },
+              {
+                "target": 1,
+                "amount": 11471
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [],
+          "deathEvents": [],
+          "buyBackEvents": [],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 5247,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 83,
+              "abilityId": 5245,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 2623,
+              "abilityId": 927,
+              "level": 0,
+              "levelObtained": 28
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item2": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 87,
+              "item0": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 44,
+                "charges": 2
+              },
+              "item2": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 2750,
+              "item0": {
+                "itemId": 263,
+                "charges": 0
+              },
+              "item1": {
+                "itemId": 158,
+                "charges": 0
+              },
+              "item2": {
+                "itemId": 135,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 116,
+                "charges": 0
+              },
+              "item4": {
+                "itemId": 156,
+                "charges": 0
+              },
+              "item5": {
+                "itemId": 141,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 2190,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 312436974,
+        "playerSlot": 129,
+        "heroId": 120,
+        "isRadiant": false,
+        "kills": 7,
+        "deaths": 0,
+        "assists": 19,
+        "level": 27,
+        "numLastHits": 437,
+        "numDenies": 6,
+        "heroDamage": 24567,
+        "towerDamage": 2177,
+        "heroHealing": 0,
+        "networth": 29961,
+        "item0Id": 225,
+        "item1Id": 1097,
+        "item2Id": 1,
+        "item3Id": 235,
+        "item4Id": 143,
+        "item5Id": 108,
+        "backpack0Id": null,
+        "backpack1Id": 41,
+        "backpack2Id": null,
+        "neutral0Id": 1862,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 16
+            },
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": 2897,
+              "itemId": 1097
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 16,
+                "amount": 6032
+              },
+              {
+                "target": 21,
+                "amount": 6352
+              },
+              {
+                "target": 55,
+                "amount": 2913
+              },
+              {
+                "target": 112,
+                "amount": 4978
+              },
+              {
+                "target": 1,
+                "amount": 4292
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [],
+          "deathEvents": [],
+          "buyBackEvents": [],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 6461,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 67,
+              "abilityId": 6344,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 2701,
+              "abilityId": 1054,
+              "level": 0,
+              "levelObtained": 26
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 42,
+                "charges": 1
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": {
+                "itemId": 43,
+                "charges": 1
+              },
+              "backPack1": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": -54,
+              "item0": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item1": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": null,
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": {
+                "itemId": 43,
+                "charges": 1
+              },
+              "backPack1": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 2898,
+              "item0": {
+                "itemId": 225,
+                "charges": 0
+              },
+              "item1": {
+                "itemId": 1097,
+                "charges": 0
+              },
+              "item2": {
+                "itemId": 1,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 235,
+                "charges": 0
+              },
+              "item4": {
+                "itemId": 143,
+                "charges": 0
+              },
+              "item5": {
+                "itemId": 108,
+                "charges": 0
+              },
+              "backPack0": null,
+              "backPack1": {
+                "itemId": 41,
+                "charges": 0
+              },
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 1862,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 183719386,
+        "playerSlot": 130,
+        "heroId": 114,
+        "isRadiant": false,
+        "kills": 8,
+        "deaths": 5,
+        "assists": 10,
+        "level": 26,
+        "numLastHits": 357,
+        "numDenies": 20,
+        "heroDamage": 17399,
+        "towerDamage": 6351,
+        "heroHealing": 400,
+        "networth": 27132,
+        "item0Id": 63,
+        "item1Id": 225,
+        "item2Id": 40,
+        "item3Id": 116,
+        "item4Id": 1097,
+        "item5Id": 939,
+        "backpack0Id": 36,
+        "backpack1Id": null,
+        "backpack2Id": null,
+        "neutral0Id": 1721,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": -89,
+              "itemId": 20
+            },
+            {
+              "time": 2806,
+              "itemId": 216
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 1,
+                "amount": 5380
+              },
+              {
+                "target": 21,
+                "amount": 4640
+              },
+              {
+                "target": 112,
+                "amount": 1859
+              },
+              {
+                "target": 16,
+                "amount": 2759
+              },
+              {
+                "target": 55,
+                "amount": 2761
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 519,
+              "amount": -90,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 563,
+              "amount": -93,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 938,
+              "amount": -165,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2491,
+              "amount": -616,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2702,
+              "amount": -634,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 519,
+              "attacker": 112,
+              "target": 114,
+              "goldFed": 449,
+              "goldLost": 0,
+              "timeDead": 26
+            },
+            {
+              "time": 563,
+              "attacker": 112,
+              "target": 114,
+              "goldFed": 437,
+              "goldLost": 35,
+              "timeDead": 26
+            },
+            {
+              "time": 938,
+              "attacker": 16,
+              "target": 114,
+              "goldFed": 555,
+              "goldLost": 165,
+              "timeDead": 32
+            },
+            {
+              "time": 2491,
+              "attacker": 55,
+              "target": 114,
+              "goldFed": 1863,
+              "goldLost": 616,
+              "timeDead": 90
+            },
+            {
+              "time": 2702,
+              "attacker": 1,
+              "target": 114,
+              "goldFed": 1729,
+              "goldLost": 634,
+              "timeDead": 100
+            }
+          ],
+          "buyBackEvents": [],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 5716,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 105,
+              "abilityId": 5723,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 2693,
+              "abilityId": 7025,
+              "level": 0,
+              "levelObtained": 25
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item1": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 67,
+              "item0": {
+                "itemId": 44,
+                "charges": 2
+              },
+              "item1": {
+                "itemId": 20,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 2882,
+              "item0": {
+                "itemId": 63,
+                "charges": 0
+              },
+              "item1": {
+                "itemId": 225,
+                "charges": null
+              },
+              "item2": {
+                "itemId": 40,
+                "charges": 2
+              },
+              "item3": {
+                "itemId": 116,
+                "charges": 0
+              },
+              "item4": {
+                "itemId": 1097,
+                "charges": 0
+              },
+              "item5": {
+                "itemId": 939,
+                "charges": 0
+              },
+              "backPack0": {
+                "itemId": 36,
+                "charges": 9
+              },
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 1721,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 93817671,
+        "playerSlot": 131,
+        "heroId": 50,
+        "isRadiant": false,
+        "kills": 1,
+        "deaths": 5,
+        "assists": 21,
+        "level": 22,
+        "numLastHits": 100,
+        "numDenies": 7,
+        "heroDamage": 6496,
+        "towerDamage": 117,
+        "heroHealing": 15807,
+        "networth": 16622,
+        "item0Id": 40,
+        "item1Id": 1,
+        "item2Id": null,
+        "item3Id": 180,
+        "item4Id": 269,
+        "item5Id": 256,
+        "backpack0Id": null,
+        "backpack1Id": null,
+        "backpack2Id": null,
+        "neutral0Id": 2190,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": -89,
+              "itemId": 1123
+            },
+            {
+              "time": 2877,
+              "itemId": 79
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 21,
+                "amount": 1859
+              },
+              {
+                "target": 55,
+                "amount": 1397
+              },
+              {
+                "target": 1,
+                "amount": 1188
+              },
+              {
+                "target": 16,
+                "amount": 1034
+              },
+              {
+                "target": 112,
+                "amount": 1018
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": -23,
+              "amount": -13,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 344,
+              "amount": -30,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 526,
+              "amount": -40,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1825,
+              "amount": -188,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2690,
+              "amount": -376,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": -23,
+              "attacker": 55,
+              "target": 50,
+              "goldFed": 370,
+              "goldLost": 0,
+              "timeDead": 11
+            },
+            {
+              "time": 344,
+              "attacker": 1,
+              "target": 50,
+              "goldFed": 317,
+              "goldLost": 30,
+              "timeDead": 18
+            },
+            {
+              "time": 526,
+              "attacker": 16,
+              "target": 50,
+              "goldFed": 345,
+              "goldLost": 40,
+              "timeDead": 24
+            },
+            {
+              "time": 1825,
+              "attacker": 55,
+              "target": 50,
+              "goldFed": 669,
+              "goldLost": 188,
+              "timeDead": 48
+            },
+            {
+              "time": 2690,
+              "attacker": 21,
+              "target": 50,
+              "goldFed": 1161,
+              "goldLost": 376,
+              "timeDead": 75
+            }
+          ],
+          "buyBackEvents": [],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 5235,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 98,
+              "abilityId": 5233,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 2551,
+              "abilityId": 1552,
+              "level": 0,
+              "levelObtained": 20
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 188,
+                "charges": 1
+              },
+              "item1": {
+                "itemId": 44,
+                "charges": 6
+              },
+              "item2": {
+                "itemId": 43,
+                "charges": 1
+              },
+              "item3": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item4": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack1": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": -87,
+              "item0": null,
+              "item1": {
+                "itemId": 44,
+                "charges": 6
+              },
+              "item2": {
+                "itemId": 43,
+                "charges": 1
+              },
+              "item3": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item4": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item5": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack0": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack1": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 2902,
+              "item0": {
+                "itemId": 40,
+                "charges": 1
+              },
+              "item1": {
+                "itemId": 1,
+                "charges": 0
+              },
+              "item2": null,
+              "item3": {
+                "itemId": 180,
+                "charges": 0
+              },
+              "item4": {
+                "itemId": 269,
+                "charges": 1
+              },
+              "item5": {
+                "itemId": 256,
+                "charges": 0
+              },
+              "backPack0": null,
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 2190,
+                "charges": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "steamAccountId": 103735745,
+        "playerSlot": 132,
+        "heroId": 119,
+        "isRadiant": false,
+        "kills": 3,
+        "deaths": 7,
+        "assists": 21,
+        "level": 23,
+        "numLastHits": 44,
+        "numDenies": 10,
+        "heroDamage": 17529,
+        "towerDamage": 0,
+        "heroHealing": 316,
+        "networth": 13904,
+        "item0Id": 1852,
+        "item1Id": 1,
+        "item2Id": 1854,
+        "item3Id": 214,
+        "item4Id": 30,
+        "item5Id": 100,
+        "backpack0Id": 40,
+        "backpack1Id": null,
+        "backpack2Id": null,
+        "neutral0Id": 1719,
+        "stats": {
+          "itemPurchases": [
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": -89,
+              "itemId": 27
+            },
+            {
+              "time": 2767,
+              "itemId": 42
+            }
+          ],
+          "heroDamageReport": {
+            "dealtTargets": [
+              {
+                "target": 1,
+                "amount": 2890
+              },
+              {
+                "target": 112,
+                "amount": 3958
+              },
+              {
+                "target": 16,
+                "amount": 6429
+              },
+              {
+                "target": 55,
+                "amount": 1347
+              },
+              {
+                "target": 21,
+                "amount": 2905
+              }
+            ]
+          }
+        },
+        "playbackData": {
+          "goldEvents": [
+            {
+              "time": 340,
+              "amount": -22,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 691,
+              "amount": -49,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1119,
+              "amount": -79,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 1833,
+              "amount": -160,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2173,
+              "amount": -245,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2489,
+              "amount": -302,
+              "reason": "DEATH",
+              "isValidForStats": false
+            },
+            {
+              "time": 2689,
+              "amount": -302,
+              "reason": "DEATH",
+              "isValidForStats": false
+            }
+          ],
+          "deathEvents": [
+            {
+              "time": 340,
+              "attacker": 16,
+              "target": 119,
+              "goldFed": 313,
+              "goldLost": 22,
+              "timeDead": 18
+            },
+            {
+              "time": 691,
+              "attacker": 21,
+              "target": 119,
+              "goldFed": 339,
+              "goldLost": 49,
+              "timeDead": 26
+            },
+            {
+              "time": 1119,
+              "attacker": 16,
+              "target": 119,
+              "goldFed": 443,
+              "goldLost": 0,
+              "timeDead": 32
+            },
+            {
+              "time": 1833,
+              "attacker": 1,
+              "target": 119,
+              "goldFed": 617,
+              "goldLost": 10,
+              "timeDead": 46
+            },
+            {
+              "time": 2173,
+              "attacker": 16,
+              "target": 119,
+              "goldFed": 793,
+              "goldLost": 245,
+              "timeDead": 52
+            },
+            {
+              "time": 2489,
+              "attacker": 55,
+              "target": 119,
+              "goldFed": 1020,
+              "goldLost": 302,
+              "timeDead": 54
+            },
+            {
+              "time": 2689,
+              "attacker": 16,
+              "target": 119,
+              "goldFed": 1035,
+              "goldLost": 82,
+              "timeDead": 76
+            }
+          ],
+          "buyBackEvents": [],
+          "abilityLearnEvents": [
+            {
+              "time": -89,
+              "abilityId": 6339,
+              "level": 0,
+              "levelObtained": 1
+            },
+            {
+              "time": 142,
+              "abilityId": 6341,
+              "level": 0,
+              "levelObtained": 2
+            },
+            {
+              "time": 2601,
+              "abilityId": 6464,
+              "level": 0,
+              "levelObtained": 20
+            }
+          ],
+          "inventoryEvents": [
+            {
+              "time": -89,
+              "item0": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item1": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item2": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 27,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 218,
+                "charges": 1
+              },
+              "item5": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "backPack0": null,
+              "backPack1": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": -54,
+              "item0": {
+                "itemId": 44,
+                "charges": 3
+              },
+              "item1": {
+                "itemId": 1123,
+                "charges": 1
+              },
+              "item2": {
+                "itemId": 16,
+                "charges": null
+              },
+              "item3": {
+                "itemId": 27,
+                "charges": null
+              },
+              "item4": {
+                "itemId": 43,
+                "charges": 1
+              },
+              "item5": {
+                "itemId": 237,
+                "charges": 1
+              },
+              "backPack0": null,
+              "backPack1": {
+                "itemId": 16,
+                "charges": null
+              },
+              "backPack2": null,
+              "neutral0": null
+            },
+            {
+              "time": 2902,
+              "item0": {
+                "itemId": 1852,
+                "charges": 3
+              },
+              "item1": {
+                "itemId": 1,
+                "charges": 0
+              },
+              "item2": {
+                "itemId": 1854,
+                "charges": 0
+              },
+              "item3": {
+                "itemId": 214,
+                "charges": 0
+              },
+              "item4": {
+                "itemId": 30,
+                "charges": 0
+              },
+              "item5": {
+                "itemId": 100,
+                "charges": 0
+              },
+              "backPack0": {
+                "itemId": 40,
+                "charges": 1
+              },
+              "backPack1": null,
+              "backPack2": null,
+              "neutral0": {
+                "itemId": 1719,
+                "charges": null
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "fixture_scope": "Live selected source facts; DEATH gold only; inventory/purchase/upgrade samples truncated. Not a complete event history."
+  }
+}
