@@ -15,6 +15,8 @@ Look up one existing Dota 2 Game by its positive Valve single-game ID. The ID
 may be explicitly provided by the user, returned by player.recent_games, or
 returned as valve_game_id by a resolved esports.game.resolve result. A PandaScore
 Match, Series, or Game ID is not a Valve Game ID and cannot be passed here.
+In particular, esports.match.search games[].pandascore_game_id must be resolved
+through esports.game.resolve; it cannot be renamed or copied into valve_game_id.
 
 A resolved game-resolution result may select a sole candidate with identity
 warnings. Read its selection_basis, warnings and evidence before using the ID;

@@ -154,7 +154,7 @@ def test_match_search_accepts_relationship_and_result_filters() -> None:
 def test_match_dtos_are_strict_and_have_frozen_fields() -> None:
     assert set(MatchParticipantDTO.model_fields) == {"team", "score"}
     assert set(MatchGameDTO.model_fields) == {
-        "id",
+        "pandascore_game_id",
         "position",
         "status",
         "begin_at",
@@ -201,6 +201,22 @@ def test_match_dtos_are_strict_and_have_frozen_fields() -> None:
     assert match.league_id is None
     assert match.series_id is None
     assert match.tournament_id is None
+    source_game = {
+        "pandascore_game_id": 739594,
+        "position": 1,
+        "status": "finished",
+        "complete": True,
+        "forfeit": False,
+    }
+    game = MatchGameDTO.model_validate(source_game)
+    assert game.model_dump()["pandascore_game_id"] == 739594
+    assert "id" not in game.model_dump()
+    with pytest.raises(ValueError):
+        MatchGameDTO.model_validate({**source_game, "id": 739594})
+    with pytest.raises(ValueError):
+        MatchGameDTO.model_validate(
+            {k: v for k, v in {**source_game, "id": 739594}.items() if k != "pandascore_game_id"}
+        )
     with pytest.raises(ValueError):
         MatchDTO(
             id=42,
@@ -288,9 +304,7 @@ def test_empty_match_search_still_returns_artifact_continuation() -> None:
 
     register_match_tool(registry, search)
     result = asyncio.run(
-        registry.execute(
-            ToolCall(id="empty-match", name="esports.match.search", arguments={})
-        )
+        registry.execute(ToolCall(id="empty-match", name="esports.match.search", arguments={}))
     )
 
     assert result.status == "ok"
@@ -303,8 +317,7 @@ def test_empty_match_search_still_returns_artifact_continuation() -> None:
     }
     assert asyncio.run(store.get(result.content["artifact_ref"])) == result.content["value"]
     assert (
-        asyncio.run(store.get_source_tool(result.content["artifact_ref"]))
-        == "esports.match.search"
+        asyncio.run(store.get_source_tool(result.content["artifact_ref"])) == "esports.match.search"
     )
 
 
@@ -312,6 +325,8 @@ def test_default_vnext_registry_contains_artifacts_and_esports_search_tools() ->
     registry = build_vnext_registry(settings=VNextSettings())
 
     assert {tool.name for tool in registry.list()} == {
+        "artifact.query",
+        "math.calculate",
         "artifact.grep",
         "artifact.read",
         "esports.league.search",

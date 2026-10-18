@@ -1086,6 +1086,12 @@ They directly describe:
 
 Exact DTO field shapes remain part of detailed Match DTO design.
 
+In the model-facing `games[]`, provider `id` is named `pandascore_game_id`.
+There is no old `id` alias and this value is not a Valve game ID. The Game's
+`position`, selected Match path, and search Artifact are inputs to
+`esports.game.resolve`; its selected `valve_game_id` is the input to `game.detail`.
+Internal validated source records retain the native `games[].id` vocabulary.
+
 The following are explicitly outside the DotaMind Match contract and should be removed during response projection:
 
 ```text

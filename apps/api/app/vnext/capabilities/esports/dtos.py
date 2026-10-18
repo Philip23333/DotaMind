@@ -207,11 +207,11 @@ class MatchParticipantDTO(BaseModel):
 
 
 class MatchGameDTO(BaseModel):
-    """A single game within a match."""
+    """A PandaScore game record within a Match, not a Valve game identity."""
 
     model_config = ConfigDict(extra="forbid")
 
-    id: int
+    pandascore_game_id: int
     position: int
     status: str
 

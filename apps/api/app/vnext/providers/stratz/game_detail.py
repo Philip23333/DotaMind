@@ -118,7 +118,9 @@ class StratzGameDetailAdapter:
         match = data["match"]
         if match is None:
             raise StructuredToolError(
-                "provider_error", "STRATZ game detail is unavailable", {"provider": "stratz"}
+                "provider_error",
+                "STRATZ returned no record for the requested Valve game ID",
+                {"provider": "stratz", "valve_game_id": match_id},
             )
         if (
             not isinstance(match, dict)

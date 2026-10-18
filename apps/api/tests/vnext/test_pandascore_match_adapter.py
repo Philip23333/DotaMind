@@ -302,9 +302,7 @@ def test_adapter_normalizes_complete_match_projection() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=[_row()], request=request)
 
-    item = asyncio.run(
-        _adapter(handler).search(MatchSearchInput())
-    ).items[0]
+    item = asyncio.run(_adapter(handler).search(MatchSearchInput())).items[0]
 
     assert item.model_dump(mode="json") == {
         "id": 42,
@@ -329,6 +327,7 @@ def test_adapter_normalizes_complete_match_projection() -> None:
                     "location": "us",
                     "slug": "alpha",
                     "image_url": "https://example.test/alpha.png",
+                    "display_ref": None,
                 },
                 "score": 2,
             },
@@ -340,6 +339,7 @@ def test_adapter_normalizes_complete_match_projection() -> None:
                     "location": "ca",
                     "slug": "beta",
                     "image_url": "https://example.test/beta.png",
+                    "display_ref": None,
                 },
                 "score": 1,
             },
@@ -352,10 +352,11 @@ def test_adapter_normalizes_complete_match_projection() -> None:
             "location": "us",
             "slug": "alpha",
             "image_url": "https://example.test/alpha.png",
+            "display_ref": None,
         },
         "games": [
             {
-                "id": 9001,
+                "pandascore_game_id": 9001,
                 "position": 1,
                 "status": "finished",
                 "begin_at": "2026-09-01T10:05:00Z",
@@ -470,11 +471,7 @@ def test_past_does_not_implicitly_filter_finished_and_explicit_status_is_preserv
 
     adapter = _adapter(handler)
     asyncio.run(adapter.search(MatchSearchInput(team_id=123, lifecycle="past")))
-    asyncio.run(
-        adapter.search(
-            MatchSearchInput(team_id=123, lifecycle="past", status="finished")
-        )
-    )
+    asyncio.run(adapter.search(MatchSearchInput(team_id=123, lifecycle="past", status="finished")))
 
     assert calls[0]["filter[opponent_id]"] == "123"
     assert "filter[status]" not in calls[0]

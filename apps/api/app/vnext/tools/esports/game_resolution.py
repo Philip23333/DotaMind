@@ -11,13 +11,13 @@ from app.vnext.capabilities.esports.game_resolution import (
 from app.vnext.tools.definition import ToolDefinition
 from app.vnext.tools.registry import ToolRegistry
 
-GameResolutionHandler = Callable[
-    [EsportsGameResolveInput], Awaitable[EsportsGameResolutionResult]
-]
+GameResolutionHandler = Callable[[EsportsGameResolveInput], Awaitable[EsportsGameResolutionResult]]
 
 GAME_RESOLUTION_DESCRIPTION = """\
 Resolve the Valve identity of one Game within a Match returned by
 esports.match.search. Use the Match-search Artifact from the current session.
+The source games[].pandascore_game_id is a PandaScore record ID, not a Valve ID.
+Select by games[].position as game_position; do not pass the record ID as a position.
 match_path selects a Match in the stored search document (for example,
 items.0 selects the first Match); game_position selects that Match's source Game
 position (for example, 4 selects position 4). These values are independent. The

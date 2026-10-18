@@ -277,7 +277,16 @@ uses `id`, `league_id`, `series_id`, `tournament_id`, `team_id`, `name`,
 `winner_id`, `status`, `lifecycle`, `sort`, `page`, and `limit`. It returns a
 `MatchDTO`: parent competition objects are represented by IDs only;
 `opponents[]` and `results[]` become ordered `participants[]`, `winner{}` is a
-`TeamRefDTO`, and `games[]` becomes `MatchGameDTO[]`. A missing provider result
+`TeamRefDTO`, and `games[]` becomes `MatchGameDTO[]`. Each Game's source `id`
+is exposed only as `pandascore_game_id`, with no `id` alias. It is a PandaScore
+record ID, not a Valve ID and not an input to `game.detail`. Use `position` as
+`game_position` with the Match Artifact continuation to `esports.game.resolve`;
+only a resolved `valve_game_id` establishes that cross-source identity. Raw
+PandaScore records remain internal and retain their native `games[].id` field.
+Previously stored Match Artifacts using the old `games[].id` contract are not
+migrated or accepted by the new continuation validator; retrieve a new Match
+search result before resolving from those older sessions.
+A missing provider result
 maps to `score=None`, while an explicit provider score of `0` remains `0`. The
 schema intentionally does not expose provider query syntax or provider-private
 field names. One invocation maps to one bounded provider collection request.

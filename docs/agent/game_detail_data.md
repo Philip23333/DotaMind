@@ -91,6 +91,12 @@ framework is required.
 | First blood | Preserve STRATZ reported time and explicit message facts separately; record disagreement |
 | Hero interactions | Verified explicit STRATZ target-damage facts; confirmed normalized deaths for kill counts; OpenDota direct hero maps for unsupported damage/healing groups |
 
+A null STRATZ `data.match` returns `provider_error` with the message
+`STRATZ returned no record for the requested Valve game ID` and the requested
+`valve_game_id` in error details. This describes only that lookup, not a
+provider-wide outage or proof that a target esports game lacks data. Positive
+IDs are not classified as PandaScore or Valve IDs by their digit count.
+
 A STRATZ transport/root-schema/identity failure returns the existing structured
 error; there is no silent whole-record failover. An OpenDota identity mismatch or
 malformed root record likewise fails validation. A supplemental read's ordinary

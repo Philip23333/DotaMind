@@ -190,6 +190,43 @@ def test_unresolved_result_and_structured_service_error_keep_semantics() -> None
     assert failed.error is not None and failed.error.code == "provider_timeout"
 
 
+def test_renamed_pandascore_game_id_survives_artifact_continuation():
+    from app.vnext.capabilities.esports.match import MatchSearchResult
+    from app.vnext.providers.pandascore.match_adapter import PandaScoreMatchAdapter
+    from tests.vnext.test_pandascore_match_adapter import _row
+
+    source = _row()
+    source["id"] = 1700719
+    source["games"][0]["id"] = 739594
+    item = PandaScoreMatchAdapter._normalize(source)
+    document = MatchSearchResult(items=[item], page=1, limit=20).model_dump(mode="json")
+    assert document["items"][0]["games"][0]["pandascore_game_id"] == 739594
+    assert "id" not in document["items"][0]["games"][0]
+    assert source["games"][0]["id"] == 739594
+    calls = []
+
+    class Service:
+        async def resolve(self, match_id, game_position, *, confirmed_mappings):
+            calls.append((match_id, game_position, confirmed_mappings))
+            return _result().model_copy(update={"game_position": 1, "valve_game_id": 9018736585})
+
+    async def run():
+        store = SessionArtifactStore()
+        ref = await store.put(document, source_tool="esports.match.search")
+        continuation = GameResolutionContinuation(store, Service())
+        return await continuation.resolve(
+            EsportsGameResolveInput(
+                match_artifact_ref=ref,
+                match_path="items.0",
+                game_position=1,
+            )
+        )
+
+    result = asyncio.run(run())
+    assert calls == [(1700719, 1, {})]
+    assert result.valve_game_id == 9018736585
+
+
 def test_missing_processor_fails_before_handler_and_save_failure_does_not_inline() -> None:
     called = False
     no_processor_registry = ToolRegistry()
@@ -252,9 +289,7 @@ def test_registry_preserves_argument_artifact_and_path_error_codes() -> None:
             source_tool="esports.match.search",
         )
     )
-    missing_path = asyncio.run(
-        registry.execute(_call({**base, "match_artifact_ref": ref}))
-    )
+    missing_path = asyncio.run(registry.execute(_call({**base, "match_artifact_ref": ref})))
     assert missing_path.status == "error"
     assert missing_path.error is not None
     assert missing_path.error.code == "artifact_path_not_found"
@@ -274,21 +309,15 @@ def test_registry_preserves_argument_artifact_and_path_error_codes() -> None:
         "limit": 20,
         "anomalies": [],
     }
-    valid_ref = asyncio.run(
-        store.put(valid_doc, source_tool="esports.match.search")
-    )
+    valid_ref = asyncio.run(store.put(valid_doc, source_tool="esports.match.search"))
     out_of_range = asyncio.run(
-        registry.execute(
-            _call({**base, "match_artifact_ref": valid_ref, "match_path": "items.1"})
-        )
+        registry.execute(_call({**base, "match_artifact_ref": valid_ref, "match_path": "items.1"}))
     )
     assert out_of_range.status == "error"
     assert out_of_range.error is not None
     assert out_of_range.error.code == "artifact_path_not_found"
 
-    invalid_arguments = asyncio.run(
-        registry.execute(_call({**base, "match_id": 123}))
-    )
+    invalid_arguments = asyncio.run(registry.execute(_call({**base, "match_id": 123})))
     assert invalid_arguments.status == "error"
     assert invalid_arguments.error is not None
     assert invalid_arguments.error.code == "invalid_arguments"

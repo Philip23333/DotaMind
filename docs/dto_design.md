@@ -636,7 +636,7 @@ Unlike Tournament normalization, this is not an unconditional union.
 class MatchGameDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: int
+    pandascore_game_id: int
     position: int
     status: str
 
@@ -656,6 +656,11 @@ Provider normalization:
 game.winner.id
 → winner_id
 ```
+
+Source `game.id` maps to `pandascore_game_id` without retaining an `id` alias.
+This ID belongs to PandaScore and cannot be passed to `game.detail`. Select the
+Game's `position` through `esports.game.resolve` to obtain its `valve_game_id`.
+Complete internal PandaScore source records keep the provider-native `id`.
 
 Removed:
 

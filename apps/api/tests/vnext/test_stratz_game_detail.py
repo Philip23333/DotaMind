@@ -110,6 +110,22 @@ def test_sanitized_failures_are_not_empty_successes(response, code):
     assert "private-token" not in str(exc.value)
 
 
+@pytest.mark.parametrize("match_id", [1, 739594, 9018736585])
+def test_empty_record_error_is_scoped_to_requested_id_without_digit_heuristics(match_id):
+    calls = []
+
+    def handler(request):
+        calls.append(json.loads(request.content)["variables"])
+        return httpx.Response(200, json={"data": {"match": None}})
+
+    with pytest.raises(StructuredToolError) as caught:
+        asyncio.run(adapter_for(handler).get_game_record(match_id))
+    assert calls == [{"id": match_id}]
+    assert caught.value.code == "provider_error"
+    assert str(caught.value) == "STRATZ returned no record for the requested Valve game ID"
+    assert caught.value.details == {"provider": "stratz", "valve_game_id": match_id}
+
+
 def test_timeout_cancellation_and_invalid_input():
     def timeout(_):
         raise httpx.ReadTimeout("private-token")

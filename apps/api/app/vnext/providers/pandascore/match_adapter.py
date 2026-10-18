@@ -111,16 +111,10 @@ class PandaScoreMatchAdapter:
             end_at=row.get("end_at"),
             scheduled_at=row.get("scheduled_at"),
             original_scheduled_at=row.get("original_scheduled_at"),
-            league_id=(
-                int(row["league_id"]) if row.get("league_id") is not None else None
-            ),
-            series_id=(
-                int(row["serie_id"]) if row.get("serie_id") is not None else None
-            ),
+            league_id=(int(row["league_id"]) if row.get("league_id") is not None else None),
+            series_id=(int(row["serie_id"]) if row.get("serie_id") is not None else None),
             tournament_id=(
-                int(row["tournament_id"])
-                if row.get("tournament_id") is not None
-                else None
+                int(row["tournament_id"]) if row.get("tournament_id") is not None else None
             ),
             participants=cls._participants(
                 row.get("opponents"),
@@ -279,9 +273,7 @@ class PandaScoreMatchAdapter:
                 )
                 anomaly_list.append(
                     ResponseAnomaly(
-                        path=(
-                            f"{path}.results[{result_index_by_team_id[team_id]}]"
-                        ),
+                        path=(f"{path}.results[{result_index_by_team_id[team_id]}]"),
                         reason="result references unknown opponent",
                         provider_id=team_id,
                     )
@@ -301,9 +293,7 @@ class PandaScoreMatchAdapter:
             return None
         anomaly_list = anomalies if anomalies is not None else []
         if not isinstance(value, dict):
-            anomaly_list.append(
-                ResponseAnomaly(path=path, reason="invalid winner relation")
-            )
+            anomaly_list.append(ResponseAnomaly(path=path, reason="invalid winner relation"))
             return None
         try:
             return cls._map_team_ref(value)
@@ -380,7 +370,7 @@ class PandaScoreMatchAdapter:
             try:
                 result.append(
                     MatchGameDTO(
-                        id=int(game["id"]),
+                        pandascore_game_id=int(game["id"]),
                         position=int(game["position"]),
                         status=game["status"],
                         begin_at=game.get("begin_at"),
