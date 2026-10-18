@@ -165,3 +165,79 @@ def test_unavailable_supplement_is_explicit_and_never_zero_economy():
     groups = [g for g in data.coverage.groups if g.path == "economy"]
     assert groups[0].status == "unavailable" and groups[0].source_paths == []
     assert "provider_timeout" in groups[0].reason
+
+
+def test_optional_playback_outage_keeps_minutes_and_recovers_partial_deaths_from_hero_kills():
+    record = primary()
+    for i, player in enumerate(record.data["players"]):
+        player["playbackData"] = None
+        record.field_issues.append(f"players[{i}].playbackData")
+    extra = OpenDotaGameRecord(
+        match_id=record.match_id,
+        retrieved_at=record.retrieved_at,
+        data=json.loads((FIXTURES / "opendota_8960991322.json").read_text()),
+    )
+    data = project(record, extra)
+    assert len(data.events.hero_deaths) == 64
+    assert sum(p.final_stats.deaths for p in data.players) == 65
+    assert sum(c.unaccounted_deaths for c in data.coverage.death_counts) == 1
+    assert any(
+        m.source == "opendota"
+        and m.source_value == 1
+        and m.source_path
+        and 'killed_by["dota_fountain"]' in m.source_path
+        for m in data.coverage.missing
+    )
+    assert all(e.source_paths[0].source == "opendota" for e in data.events.hero_deaths)
+    assert all(p.minute_timeline is not None for p in data.players)
+    collapse = next(c for c in data.coverage.death_counts if c.player_slot == 132)
+    assert (collapse.final_deaths, collapse.known_time_deaths, collapse.unaccounted_deaths) == (
+        5,
+        4,
+        1,
+    )
+    assert len(data.events.roshan_kills) == 3
+    assert sum(e.type == "tormentor_kill" for e in data.events.other_objectives) == 2
+    assert any("optional playback" in m.reason for m in data.coverage.missing)
+
+
+def test_zero_amount_death_is_a_fact_and_unknown_time_death_is_not_dropped():
+    record = primary()
+    record.data["players"][0]["playbackData"]["goldEvents"][0]["amount"] = 0
+    record.data["players"][0]["playbackData"]["goldEvents"][0]["time"] = None
+    data = project(record)
+    assert len(data.events.hero_deaths) == 65
+    counts = data.coverage.death_counts[0]
+    assert counts.known_time_deaths == 4 and counts.unknown_time_deaths == 1
+    assert counts.unaccounted_deaths == 0
+    unknown = next(
+        e for e in data.events.hero_deaths if e.victim_player_slot == 0 and e.time_seconds is None
+    )
+    assert unknown.time_label is None and unknown.gold_lost is None
+
+
+def test_missing_player_slot_never_receives_unattributed_kills():
+    record = primary()
+    record.data["players"][0]["playerSlot"] = None
+    data = project(record)
+    assert data.interactions.players[0].kills_by_target is None
+
+
+def test_inventory_mapping_gap_points_to_the_real_public_slot_field():
+    record = primary()
+    record.data["players"][0]["playbackData"]["inventoryEvents"][0]["item0"]["itemId"] = 999999
+    data = project(record)
+    assert any(
+        m.path == "builds.players[0].inventory_events[0].inventory[0].item"
+        and m.source_path == "players[0].playbackData.inventoryEvents[0].item0.itemId"
+        for m in data.coverage.missing
+    )
+
+
+def test_unavailable_supplement_curves_are_not_advertised_as_an_available_group():
+    record = primary(9040460429)
+    extra = supplement(record)
+    extra.data["radiant_gold_adv"] = None
+    extra.data["radiant_xp_adv"] = None
+    data = project(record, extra)
+    assert next(g for g in data.coverage.groups if g.path == "economy").status == "unavailable"

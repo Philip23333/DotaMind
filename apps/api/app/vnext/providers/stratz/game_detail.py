@@ -72,6 +72,7 @@ class StratzGameRecord(BaseModel):
     provider: Literal["stratz"] = "stratz"
     retrieved_at: datetime
     data: dict[str, JsonValue]
+    field_issues: list[str] = Field(default_factory=list)
 
     @field_validator("retrieved_at")
     @classmethod
@@ -92,7 +93,9 @@ class StratzGameDetailAdapter:
 
     async def _read(self, match_id: int) -> StratzGameRecord:
         try:
-            payload = await self.client.graphql(GAME_DETAIL_QUERY, {"id": match_id})
+            payload = await self.client.graphql(
+                GAME_DETAIL_QUERY, {"id": match_id}, allow_partial_data=True
+            )
         except StratzTimeoutError:
             raise StructuredToolError(
                 "provider_timeout", "STRATZ game detail timed out", {"provider": "stratz"}
@@ -262,9 +265,35 @@ class StratzGameDetailAdapter:
                         {"target": int, "amount": int},
                     )
         try:
-            return StratzGameRecord(match_id=match_id, retrieved_at=datetime.now(UTC), data=match)
+            return StratzGameRecord(
+                match_id=match_id,
+                retrieved_at=datetime.now(UTC),
+                data=match,
+                field_issues=_optional_field_issues(payload, match),
+            )
         except ValidationError:
             raise _schema_error("data.match") from None
+
+
+def _optional_field_issues(payload, match):
+    issues = []
+    players = match.get("players") or []
+    for error in payload.get("errors") or []:
+        path = error.get("path") if isinstance(error, dict) else None
+        if not (
+            isinstance(path, list)
+            and len(path) >= 4
+            and path[:2] == ["match", "players"]
+            and type(path[2]) is int
+            and 0 <= path[2] < len(players)
+            and path[3] == "playbackData"
+            and all(type(p) in (str, int) for p in path)
+        ):
+            raise StructuredToolError(
+                "provider_error", "STRATZ game detail query failed", {"provider": "stratz"}
+            )
+        issues.append("players[" + str(path[2]) + "]." + ".".join(map(str, path[3:])))
+    return list(dict.fromkeys(issues))
 
 
 def _typed(record: dict, key: str, kind: type, path: str) -> None:

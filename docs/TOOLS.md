@@ -63,7 +63,7 @@ catalog.lookup             # local Valve hero/item names
 web.search                 # when Tavily MCP is enabled and discovery succeeds
 player.profile             # when a STRATZ token is configured
 player.recent_games        # when a STRATZ token is configured
-game.detail                # when OpenDota is explicitly enabled
+game.detail                # when a STRATZ token is configured; OpenDota supplements optional
 esports.game.resolve       # when game resolution and its required providers are enabled
 ```
 
@@ -169,10 +169,10 @@ For Larl's `20:00`, `25:00`, `30:00` samples, an illustrative target expression 
 $.data.players[?@.identity.account_id == 106305042].minute_timeline[?@.time_seconds == 1200 || @.time_seconds == 1500 || @.time_seconds == 1800]
 ```
 
-For the accepted next GameDetail schema, request `time_seconds`, `time_label`,
+For the current GameDetail schema, request `time_seconds`, `time_label`,
 `cumulative_gold_earned`, `cumulative_experience`, `last_hits`, and `known_deaths`
-in `fields`. Current stored baseline DTOs still use their original schema; the
-example does not migrate them. These are fields of the selected record; the query engine
+in `fields`. Historical stored DTOs keep their original schema and are not
+migrated by query. These are fields of the selected record; the query engine
 does not identify or add them automatically. The account predicate uses the
 player's actual `identity.account_id` path, not a top-level player member.
 Use conditions on source timestamps,
@@ -590,106 +590,60 @@ returned 20 rows newest-first, with only that account in each row; the supplied
 match predates the bounded sample. This single-account result is not a general
 provider-availability guarantee.
 
-`game.detail(valve_game_id)` reads one existing OpenDota match by Valve single-
-game ID. It registers only when `DOTAMIND_OPENDOTA_ENABLED=true`; the base URL
-defaults to `https://api.opendota.com/api`, the API key is optional, and the
-finite request timeout defaults to 20 seconds. Configure these with
-`DOTAMIND_OPENDOTA_BASE_URL`, `DOTAMIND_OPENDOTA_API_KEY`, and
-`DOTAMIND_OPENDOTA_TIMEOUT_SECONDS`. The key is sent as the `api_key` query
-parameter and is excluded from settings/client representations and tool errors.
-The endpoint follows the [OpenDota matches API documentation](https://docs.opendota.com/#tag/matches);
-OpenDota's [API tier announcement](https://blog.opendota.com/2018/04/17/changes-to-the-api/)
-describes public free-tier use without a key. Composition and registry creation
-do not make provider calls. Process environment variables take precedence over
-the root `.env`.
+`game.detail(valve_game_id)` reads one existing recorded game. It registers when
+`DOTAMIND_STRATZ_TOKEN` is configured and uses the existing STRATZ client.
+`DOTAMIND_STRATZ_TIMEOUT_SECONDS` defaults to 30 seconds. With
+`DOTAMIND_OPENDOTA_ENABLED=true`, OpenDota supplies the fixed groups in the
+[owner contract](agent/game_detail_data.md). Its base URL, optional key and
+20-second default timeout still use `DOTAMIND_OPENDOTA_BASE_URL`,
+`DOTAMIND_OPENDOTA_API_KEY` and `DOTAMIND_OPENDOTA_TIMEOUT_SECONDS`.
+Configuration comes from the root `.env`, overridden by process environment.
+Construction makes no provider calls and credentials do not enter tool results.
 
-The input is a Valve single-game ID, not a PandaScore Match, Series, or Game ID.
-It may come from the user, `player.recent_games`, or a resolved
-`esports.game.resolve` result.
+The input is a canonical Valve single-game ID, supplied directly, returned by
+`player.recent_games`, or selected by `esports.game.resolve`. It is not a
+PandaScore Match/Series/Game ID. A selected sole candidate may carry identity
+warnings; those warnings do not block the detail read. The model preserves the
+esports-association uncertainty without repeating lookup merely to clear it.
+The detail tool validates the requested Valve record, not its esports association.
 
-**Current implementation:** the governed eight-section DTO is returned in
-`data` and passed to generic Artifact externalization. Complete validated source
-records remain internal. The tool binds to `GameDetailService`,
-which constructs its public result from an internal `OpenDotaGameRecord` read.
-The resolver consumes the internal record directly. Both use the same adapter
-and client, but changing the public result no longer changes the resolver's
-record type. No extra HTTP read is introduced by the Service.
+`GameDetailService` returns the complete governed eight-section DTO and generic
+Artifact externalization returns a bounded observation. The result has no raw
+member or alternate raw-detail handle. English/Chinese hero, item, ability and
+unit names use pinned local resources, with one Catalog/unit-mapping version.
+Unknown keys and opaque codes remain scalar coverage evidence. Generic
+`artifact.read`, `artifact.grep` and `artifact.query` do not perform enrichment.
 
-**Output contract:** keep the input and the eight-section `data` structure in
-[`agent/game_detail_data.md`](agent/game_detail_data.md). The existing OpenDota
-implementation is the baseline; its accepted STRATZ-first replacement is
-described separately below. The OpenDota source
-identity is validated before projection. The result Artifact contains the
-complete governed DTO, with no raw-object field or model-facing way to retrieve
-the original response. Generic `artifact.read` and `artifact.grep` remain
-ordinary document operations.
+The current tool description states these field semantics:
 
-The DTO includes English/Chinese entity names at typed hero, item,
-ability, and event-unit fields, so reading a game does not require an explicit
-`catalog.lookup` call just to decode IDs or source unit/item keys. It retains
-canonical IDs, converts internal keys exactly using local data, and records one
-`catalog_version` and `unit_mapping_version` in the result envelope. Event types
-use fixed verified business enums. Unmapped keys/codes remain scalar evidence
-only in `coverage`; unknown entities or names do not erase known match facts.
-This enrichment and the public DTO switch are implemented and tested offline.
-They do not change the Catalog tool input, introduce unit lookup as a new model tool,
-or add image/display behavior.
+- `match.match_date` is the Beijing calendar date; `match.score` is Radiant/Dire
+  hero-kill counts, not series wins. Formal duration excludes pre-game/BP time.
+- `cumulative_gold_earned` is cumulative income, not wallet balance or net worth;
+  `cumulative_experience` is cumulative XP. No minute net worth is emitted.
+  Final `earned_gold_net_worth_gap` needs reliable same-final-time inputs;
+  otherwise null. It is not pure death gold loss.
+- `known_deaths` counts located normalized death facts; final `deaths` remains
+  the source total. Death-event coverage and killer attribution are independent.
+- Purchases, explicitly timed inventory snapshots and ability upgrades are
+  separate build facts. Purchases do not establish recipes, delivery or inventory.
+- `provider` means primary source. `sources`, coverage groups and event
+  `source_paths` attribute actual facts, retrieval times and limitations.
+  STRATZ explicit Tormentor messages and OpenDota Roshan/Aegis/building categories
+  follow the fixed table. Gold reason `ROSHAN` is not a Roshan-kill predicate.
 
-The DTO keeps source absence distinct from zero and empty values, and a missing
-field does not show that an event did not happen. The lookup does not request
-replay parsing. Large results continue to use generic Artifact externalization
-and narrower `artifact.read` paths. Deterministic coverage uses local HTTP
-mocks. The prior live cross-check for `8960882635` supports the ID mapping for
-that observed match only. The later live `8960991322` comparison records selected
-source facts in the [STRATZ reference](reference/stratz-game-detail.md), not
-general provider coverage or acceptance of the replacement implementation.
+The model does not query providers again to implement these fixed supplements.
+A narrowly scoped optional STRATZ playback-field error preserves validated core
+facts with coverage; root/identity/unscoped errors fail. Ordinary supplemental
+unavailability yields unknown dependent groups, never fabricated empty events.
+Empty source arrays do not establish complete absence of real-world events.
+Reading does not submit replay parsing or download a replay.
 
-`esports.game.resolve` keeps complete candidate detail reads internal and exposes
-only resolution evidence in its Artifact. It cannot be used as a separate route
-to retrieve those raw details. This boundary is implemented; the `game.detail`
-public DTO switch is also implemented. The evidence contract and checks are tracked in
-[`DATA.md`](DATA.md) and [`EVALS.md`](EVALS.md).
-
-The public tool validates the closed DTO after conversion. Unknown source
-extensions and previous raw player/build paths are not retrievable from its
-Artifact. The model reads the needed DTO sections through ordinary generic
-Artifact paths, with names already attached to their entities.
-
-The `game.detail` tool description states the stable interpretation of its
-governed fields: `data.match.match_date` is the `Asia/Shanghai` calendar date,
-`data.match.score` contains Radiant/Dire hero-kill counts rather than series game
-wins, and `data.economy.radiant_gold_adv` must not be relabeled as net-worth
-difference. These semantics remain owned by the game-detail data contract.
-
-### Accepted detail source migration (not implemented)
-
-Keep one `game.detail(valve_game_id)` capability. Its Service selects STRATZ as
-primary and OpenDota supplemental data by the fixed table in the
-[owner contract](agent/game_detail_data.md), validates each source identity,
-reuses reads, and returns the governed DTO. The model is not asked to query other
-providers to fill these known groups. Current tool registration/configuration and
-its actual description remain unchanged until the implementation commits.
-
-The target tool description must explain:
-
-- `cumulative_gold_earned` is cumulative earned income, distinct from wallet and
-  net worth. `cumulative_experience` is cumulative experience. There is no minute
-  `net_worth`. Final `earned_gold_net_worth_gap` requires reliable same-final-time
-  inputs and is not pure death gold loss.
-- `known_deaths` counts only normalized, timed death facts. Final source death
-  count, unknown times, and missing event coverage remain separate.
-- Purchases, explicitly timed inventory snapshots, and timed ability upgrades
-  are separate build facts. Purchases do not reconstruct ownership/combination.
-- `provider` identifies the primary source; `sources`, coverage groups, and event
-  source paths identify actual provenance and limitations. Empty source lists
-  do not establish complete absence of game events.
-
-Explicit STRATZ Tormentor events and OpenDota whole-category Roshan/Aegis/building
-supplements follow the owner table. STRATZ gold reason `ROSHAN` is not a kill
-predicate. No ratings or inferred actors are added. Primary/root identity errors
-remain structured failures; ordinary supplement unavailability leaves dependent
-groups unknown with safe coverage, never fabricated empty facts. Generic Artifact
-tools and the existing esports identity resolver do not change responsibilities.
+The resolver still consumes complete internal OpenDota records and publishes only
+resolution evidence. Its Artifact cannot retrieve candidate detail bodies. Source
+reads reuse the existing request scope; a separate STRATZ primary read is counted
+in addition to the reused OpenDota read. Deterministic boundaries and limited live
+checks are described in [EVALS](EVALS.md); [source facts](reference/stratz-game-detail.md)
+do not guarantee universal Provider coverage.
 
 `catalog.lookup(kind, ids)` resolves up to 20 exact positive hero or item IDs
 against the active local Valve Dota 2 catalog snapshot. It returns each requested

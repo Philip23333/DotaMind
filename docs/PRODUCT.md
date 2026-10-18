@@ -187,8 +187,9 @@ Steam32 account. A one-match live check confirmed that STRATZ's ID for the
 provided match also resolves as the same OpenDota match ID. A live query for
 one participant returned 20 rows newest-first; that older final was outside the
 bounded sample. This is a single-account check, not a general availability
-guarantee. `game.detail` reads an existing OpenDota game record and registers
-only when `DOTAMIND_OPENDOTA_ENABLED=true`. Reading a record does not submit a
+guarantee. `game.detail` reads governed STRATZ-first detail and registers when
+`DOTAMIND_STRATZ_TOKEN` is configured. OpenDota supplements are enabled separately
+by `DOTAMIND_OPENDOTA_ENABLED=true`. Reading a record does not submit a
 replay for parsing. The profile query has not been verified against the live
 STRATZ API. A subsequent live single-game comparison for `8960991322` verified
 selected STRATZ/OpenDota source facts; it does not establish general coverage.
@@ -209,21 +210,21 @@ match facts. This enrichment is verified offline; its data contract is owned
 by [`agent/game_detail_data.md`](agent/game_detail_data.md). Missing timelines or
 purchase data are evidence gaps, not proof that events or purchases did not occur.
 
-The accepted next detail model uses STRATZ first, with fixed OpenDota supplements
+The implemented detail model uses STRATZ first, with fixed OpenDota supplements
 inside the tool. Users still request one `valve_game_id`; the model does not have
 to discover another provider to fill known data gaps. Minute economy means
 cumulative earned income, not wallet balance or remaining net worth. Minute net
 worth is removed; final earned-income/net-worth difference is available only with
 reliable same-instant inputs. Known timed deaths and final death totals have
 separate coverage. Explicit timed equipment observations do not reconstruct
-inventory from purchases. These changes are documented targets, not current API
-behavior. The [owner contract](agent/game_detail_data.md) defines their scope;
+inventory from purchases. Optional playback-field failures preserve valid core
+facts with explicit coverage. The [owner contract](agent/game_detail_data.md) defines the scope;
 ratings, role inference, and frontend design remain outside it.
 
 ### Esports Match-to-game-detail journey (opt-in capability; real-model behavior unverified)
 
 PandaScore match and game discovery already exists, and `game.detail` already
-reads one OpenDota game by `valve_game_id`. When the opt-in game-resolution tool
+reads one governed game by `valve_game_id`. When the opt-in game-resolution tool
 is enabled with PandaScore and OpenDota configured, it can connect a selected
 Match Artifact and Game position to a selected Valve identity with its evidence
 and any incomplete-check warnings. The model-driven
@@ -246,7 +247,7 @@ selected games remain usable. A scheduled Game, a forfeit record, and an
 actually played Game are distinct; a forfeit may have no Valve game. When
 identity remains unresolved, the answer retains known esports facts and says
 that the detail path could not be connected. A resolved identity still does not
-guarantee that OpenDota has every field: missing economy or draft data stays
+guarantee that the detail sources have every field: missing economy or draft data stays
 unknown rather than being described as absent from the game. Reading a detail
 does not submit a replay for parsing.
 

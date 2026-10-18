@@ -26,7 +26,7 @@ def test_stratz_settings_default_and_root_dotenv_are_isolated(tmp_path, monkeypa
     defaults = VNextSettings.from_env()
     assert defaults.stratz_graphql_url == "https://api.stratz.com/graphql"
     assert defaults.stratz_token == ""
-    assert defaults.stratz_timeout_seconds == 20
+    assert defaults.stratz_timeout_seconds == 30
 
     env_file.write_text(
         "DOTAMIND_STRATZ_GRAPHQL_URL=https://dotenv.example/graphql\n"

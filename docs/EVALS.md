@@ -35,7 +35,7 @@ esports.player.search
 web.search                 # only when Tavily MCP discovery succeeds
 task.plan                 # when task-state coordination is enabled
 task.checkpoint           # when task-state coordination is enabled
-game.detail               # when OpenDota is explicitly enabled
+game.detail               # with a STRATZ token; OpenDota supplements optional
 esports.game.resolve      # when game resolution and required providers are enabled
 ```
 
@@ -147,23 +147,19 @@ These are offline mechanical checks; the controlled real-model comparison remain
 pending. Additional acceptance expectations are detailed below; do not infer that
 every proposed experiment has run merely because the tool is registered.
 
-The existing baseline fixture regression uses Valve game `9040460429`, account
+The exact-time fixture regression uses Valve game `9040460429`, account
 `106305042` (Larl). Filter on `players[].identity.account_id` and the exact
 `minute_timeline[].time_seconds`, not adjacent
 array positions. Verify these source-backed rows and their original read paths:
 
-These are current fixture field names, not the accepted next DTO. The migration
-must update projection fixtures and queries together; historical Artifacts keep
-their schema. Target minute rows omit net worth, rename `earned_gold/experience`
-to `cumulative_gold_earned/cumulative_experience`, and use `known_deaths` for
-located event counts. Keep the income/XP values below without substituting the
-neighboring sample.
+Current minute rows omit net worth and expose cumulative earned income/XP and
+located death counts. Historical Artifacts keep their original schema. Verify:
 
-| `time_seconds` | `time_label` | `net_worth` | `earned_gold` | `experience` | `last_hits` | `deaths` |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1200 | `20:00` | 8657 | 8767 | 9842 | 135 | 2 |
-| 1500 | `25:00` | 10730 | 10840 | 12686 | 173 | 2 |
-| 1800 | `30:00` | 13885 | 14105 | 17363 | 242 | 2 |
+| `time_seconds` | `time_label` | `cumulative_gold_earned` | `cumulative_experience` | `last_hits` | `known_deaths` |
+| --- | --- | --- | --- | --- | --- |
+| 1200 | `20:00` | 8767 | 9842 | 135 | 2 |
+| 1500 | `25:00` | 10840 | 12686 | 173 | 2 |
+| 1800 | `30:00` | 14105 | 17363 | 242 | 2 |
 
 Also verify:
 
@@ -657,7 +653,7 @@ STRATZ `Match.id` with OpenDota `match_id`, start time, and duration. A raw live
 timestamp order with only that player's row; the supplied match was older than
 the returned sample. This is one-account evidence, not a universal guarantee.
 `player.profile` and `player.recent_games` register with a STRATZ token;
-`game.detail` registers only when OpenDota is explicitly enabled.
+`game.detail` registers with a STRATZ token; OpenDota is an optional supplement.
 `game.detail` is covered by deterministic OpenDota MockTransport tests and is
 opt-in at composition. A later manual comparison of `8960991322` used live
 source reads; [the reference](reference/stratz-game-detail.md) records that sample,
@@ -669,13 +665,14 @@ the shared appearance of a player or event is not sufficient. These tests do
 not establish general current STRATZ availability or every source business
 meaning.
 
-### Current OpenDota eight-section projection (baseline deterministic checks passed)
+### Retained OpenDota supplemental projector checks
 
 The accepted target owner contract is
 [`agent/game_detail_data.md`](agent/game_detail_data.md). The adapter retains
 complete source records internally; the public Service now returns the governed
 DTO with bilingual entity/unit labels and version provenance. The following
-checks describe the current OpenDota schema, not the new STRATZ-first target.
+checks protect the retained OpenDota projector used by the fixed supplements;
+the public STRATZ-first Service checks are described separately below.
 Offline tests cover the
 closed eight-section model, static mappings, strict enums, final statistics,
 slot-preserving loadouts, purchase/skill/neutral history, source identity, and
@@ -868,52 +865,50 @@ heuristic input measure rather than a precise token count. The stage status and
 known limitations are maintained in
 [`agent/context_governance_evidence_lifecycle.md`](agent/context_governance_evidence_lifecycle.md).
 
-### STRATZ-first detail governance acceptance (planned; not run)
+### STRATZ-first detail governance acceptance
 
-Source observations for game `8960991322` are documented in
-[`reference/stratz-game-detail.md`](reference/stratz-game-detail.md). They are
-manual evidence for the design; they do not mean these implementation checks pass.
-Follow the [owner contract](agent/game_detail_data.md) and verify:
+The [owner contract](agent/game_detail_data.md) and
+[source reference](reference/stratz-game-detail.md) separate source semantics from
+implementation checks. Focused deterministic tests cover exact source identity,
+request reuse, field/namespace validation, scalar provenance, primary and
+supplemental errors/cancellation, optional playback GraphQL errors, projection,
+closed public/Artifact results and the unchanged resolver boundary.
 
-- Public input and resolver evidence boundaries remain unchanged. Validate each
-  provider's exact Valve ID, same-game player associations, source timestamps,
-  and provider NPC/hero/slot namespaces. No raw bodies or alternate detail handle
-  enter the Artifact; generic tools read the complete governed target DTO.
-- Remove minute `net_worth` and the old `earned_gold/experience/deaths` minute
-  fields. Exact-time income/XP/farming values survive under their target names.
-  Final source `deaths` survives. Final gap is null without reliable same-instant
-  cumulative-income/net-worth inputs; no last-minute or GPM approximation.
-- Each STRATZ series validates its own point/interval axis. Reject a universal
-  64/65/66-element shift, length-based matching, and implicit final samples.
-  Recheck the 640 sample XP prefix sums, then test other real cases before use.
-- Normalize deaths once. For the sample, assess the candidate 65 DEATH-gold
-  facts against final per-player counts; do not count 422 raw death entries.
-  Additional real games must cover zero loss, non-hero killers, reincarnation,
-  summons/illusions, same-second ambiguity, absent/partial logs, and unknown
-  times. Do not turn aggregates or final-count residuals into synthetic events.
-  Verify `known_deaths`, death coverage counts, and nonduplicated kill relations.
-- Sample Tormentor times are 1982/2839; Roshan times are 1795/2452/3038 from
-  OpenDota, not five STRATZ `ROSHAN` gold timestamps. Aegis/building categories
-  follow the fixed supplemental table. Null attacker is not fountain; unverified
-  chat payloads do not assign a killer or reward. First-blood 56/79 remains a
-  source conflict.
-- Timed inventory comes from explicit `inventoryEvents`, not untimed
-  `inventoryReport` positions or purchases. Preserve slots and nullable charges;
-  retain component/completed purchases without inferred recipes. Validate timed
-  ability fields. Do not report zero sampled buyback cost as a verified expense.
-- `sources`, group coverage, event paths, and conflict provider/path/value arrays
-  agree. Incomplete categories do not invalidate available economy/experience.
-  Empty source responses do not establish complete absence of game events.
-- Primary/root identity errors fail; ordinary supplement unavailability leaves
-  only its dependent groups unknown. Test timeout, rate limit, not-found, malformed
-  root, cancellation, and local resource/storage errors without hidden failover.
-  Source reads reuse the existing request scope, not one fetch per group.
+Three real STRATZ source samples, `8960991322`, `9040460429`, and `9040578015`,
+contain respectively 65, 50 and 88 DEATH facts. They match final per-player counts
+without deleting/fabricating events. Regression cases include raw illusion noise,
+zero `goldLost`, differing DEATH amounts, unknown times, ambiguous joins,
+missing slots, direct OpenDota deaths, and partial hero-kill-log recovery.
+The playback-outage case for `8960991322` recovers 64 located hero-kill deaths
+while preserving 65 final deaths and one unaccounted event; it does not invent
+a timed fountain death.
 
-After deterministic boundaries pass, run a live fixed-selection smoke test and
-real-model questions about 20/25-minute income, terminal statistics, one death,
-and Roshan/Tormentor counts. Distinguish wrong field selection, incorrect copying,
-and arithmetic errors. Existing fixture/model results cannot stand in for this
-new-provider acceptance.
+Three complete live Service reads with a 30-second STRATZ timeout passed ID/source
+checks, DTO round trips and every available minute income/XP value against
+OpenDota's own axis. Their minute-node counts are 650/490/570, death counts
+65/50/88 and explicit Roshan counts 3/2/3. STRATZ and OpenDota each read once per
+request, and repeated consumers reuse both records. Observed result sizes are
+2,299,659 / 2,149,240 / 2,824,516 compact UTF-8 bytes before later diagnostic
+wording changes; timed inventory observations dominate. These are sample sizes,
+not a DTO size guarantee or permission to put the whole result in model context.
+
+The earlier 20-second live attempt encountered GraphQL playback failures and a
+timeout; one diagnostic response took 23.17 seconds and reported ten optional
+playback errors. Root/unknown GraphQL errors are still rejected. The 30-second
+default is configurable and does not override an explicit environment value.
+
+Four real-model questions used frozen, previously retrieved source records
+through the real Service/Artifact/two-stage Runtime: exact 20/25-minute income/XP,
+formal duration and final K/D/A, Roshan/Tormentor counts/times, and the last located
+death with explicit gold loss and unknown attacking unit. The requested numeric
+facts matched the source in all four responses. This is fixed-source answer
+acceptance, not live-model-plus-Provider reliability or a guarantee about every
+extra sentence. Death coverage counts must not be described as killer attribution.
+
+Historical/unknown encodings, complete STRATZ income, individual array buckets
+and skill-level semantics still need evidence before new mappings are enabled.
+Do not treat these checks as universal coverage, frontend acceptance, or support
+for ratings, inferred roles or causal explanations.
 
 ### Esports Match-to-OpenDota game resolution (offline core and opt-in tool implemented; live Provider and Agent acceptance pending)
 

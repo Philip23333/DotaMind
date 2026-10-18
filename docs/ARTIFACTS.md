@@ -356,8 +356,8 @@ policy remains in [TOOLS.md](TOOLS.md).
 ### Complete example
 
 The following uses saved facts for Valve game `9040460429`, Larl at 25:00, with
-the accepted next GameDetail field names. Replace the placeholder with a real
-reference whose document has that schema. This is an illustrative target:
+the current GameDetail field names. Replace the placeholder with a real
+reference whose document has that schema. This is an illustrative request/result:
 existing Artifacts retain their original fields and are not migrated by query.
 
 ```json

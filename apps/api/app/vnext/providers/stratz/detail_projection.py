@@ -137,7 +137,14 @@ def _build(player, i, entities, coverage):
 
         def slot(key, row=row, j=j):
             original = row.get(key)
-            target = f"{path}.inventory_events[{j}].{key}"
+            field = (
+                f"backpack[{key[-1]}]"
+                if key.startswith("backPack")
+                else "item_neutral"
+                if key == "neutral0"
+                else f"inventory[{key[-1]}]"
+            )
+            target = f"{path}.inventory_events[{j}].{field}"
             raw = f"players[{i}].playbackData.inventoryEvents[{j}].{key}"
             if not isinstance(original, dict):
                 _missing(coverage, target, "Inventory slot observation unavailable")
@@ -146,7 +153,7 @@ def _build(player, i, entities, coverage):
                 item=entities.by_id(
                     original.get("itemId", ABSENT),
                     "item",
-                    target,
+                    f"{target}.item",
                     f"{raw}.itemId",
                     coverage,
                     empty_zero=True,
@@ -317,6 +324,8 @@ def project_stratz_detail(
     if type(source.get("id")) is not int or source["id"] != record.match_id:
         raise ValueError("STRATZ source identity differs from the internal record")
     coverage = CoverageData()
+    for issue in record.field_issues:
+        _missing(coverage, "builds", f"STRATZ reported an optional playback field error at {issue}")
     players = _rows(source.get("players"), "players", coverage)
     rows = None if players is None else []
     builds = None if players is None else []

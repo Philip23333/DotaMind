@@ -1,4 +1,4 @@
-"""Contract for reading an existing OpenDota game-detail observation."""
+"""Governed recorded-game observations identified by their canonical Valve ID."""
 
 from __future__ import annotations
 

@@ -125,3 +125,40 @@ def test_timeout_cancellation_and_invalid_input():
         asyncio.run(adapter_for(cancel).get_game_record(1))
     with pytest.raises(ValueError):
         asyncio.run(adapter_for(timeout).get_game_record(True))
+
+
+def test_optional_playback_graphql_errors_keep_valid_primary_facts_with_safe_paths():
+    source = match_source()
+    source["players"][0]["playbackData"] = None
+    response = {
+        "data": {"match": source},
+        "errors": [{"message": "private-token", "path": ["match", "players", 0, "playbackData"]}],
+    }
+    record = asyncio.run(
+        adapter_for(lambda _: httpx.Response(200, json=response)).get_game_record(source["id"])
+    )
+    assert record.data["durationSeconds"] == 3862
+    assert record.field_issues == ["players[0].playbackData"]
+    assert "private-token" not in record.model_dump_json()
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        None,
+        ["match"],
+        ["match", "id"],
+        ["match", "players", 0, "kills"],
+        ["match", "players", -1, "playbackData"],
+        ["match", "players", True, "playbackData"],
+        ["match", "players", 100, "playbackData"],
+    ],
+)
+def test_partial_graphql_support_does_not_accept_root_identity_or_unknown_errors(path):
+    source = match_source()
+    response = {"data": {"match": source}, "errors": [{"message": "private-token", "path": path}]}
+    with pytest.raises(StructuredToolError) as caught:
+        asyncio.run(
+            adapter_for(lambda _: httpx.Response(200, json=response)).get_game_record(source["id"])
+        )
+    assert caught.value.code == "provider_error"

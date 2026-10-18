@@ -4,9 +4,9 @@
 
 This document is the sole detailed data contract for `game.detail`.
 
-- **Current implementation:** `game.detail` returns the governed eight-section DTO with bilingual entity/unit objects, program-generated game-time labels, normalized event types, scalar coverage evidence, and one Catalog/unit-mapping version per result.
+- **Current implementation:** `game.detail` uses STRATZ as primary and fixed OpenDota supplements, returning the governed eight-section DTO with bilingual labels, time labels, normalized death facts, source-specific coverage, and pinned label versions.
 - **Accepted target:** keep the eight-section DTO and local bilingual labels; use STRATZ as the primary detail source and OpenDota for the fixed supplemental groups below. Clarify cumulative income, remove minute net worth, and organize verified death facts once before minute aggregation.
-- **Implementation status:** the current projector is OpenDota-only. The STRATZ-first source policy, economic renames, revised death model, inventory events, and multi-source provenance in this document are accepted targets, not implemented behavior. Existing deterministic checks cover the earlier projection. Live comparison of game `8960991322` supports the observations in the [source reference](../reference/stratz-game-detail.md), not acceptance of the new implementation.
+- **Implementation status:** the source policy, economic renames, death coverage, timed build observations, public Service/Artifact switch, and strict multi-source envelope are implemented. Three live games verify the initial mappings; unverified STRATZ time arrays, upgrade levels, complete income, and historical event encodings retain explicit limits. See [source evidence](../reference/stratz-game-detail.md) and [acceptance](../EVALS.md).
 - **Use:** minute-by-minute state review and final-game statistics.
 - **Outside this contract:** performance ratings, role inference, lane-win judgments, teamfight classification, review recommendations, counterfactuals, simulated inventory states, and continuous map replay.
 
@@ -18,8 +18,7 @@ The model-facing input remains:
 
     game.detail(valve_game_id)
 
-The target keeps one outer provenance envelope. The current implementation has
-`provider="opendota"` and no `sources` directory; this table defines the migration target:
+The public result has one provenance envelope:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -44,7 +43,12 @@ The result and its Artifact contain the complete governed DTO. They contain no
 provider object. Generic Artifact read, grep, and query operate on the stored DTO
 without provider-specific behavior.
 
-The internal/public type split is implemented: the OpenDota adapter returns `OpenDotaGameRecord` with native `match_id`, provider, retrieval time, and complete source data. The resolver consumes that record directly. `GameDetailService` separately constructs the public `GameDetailResult` by projecting that record with pinned local label resources. The eight-section projection belongs at this Service boundary. Internal records are not public retrieval handles, and future DTO conversion must leave the resolver's source values intact.
+The OpenDota adapter retains complete `OpenDotaGameRecord` values for the identity
+resolver and supplemental projection. The STRATZ adapter independently validates
+`StratzGameRecord`. `GameDetailService` constructs the public result from the
+primary record and selected supplemental groups, pinning label resources first.
+Internal records are not public retrieval handles; the resolver still receives
+its unchanged OpenDota source values.
 
 The resolver may return a selected Valve ID with `selection_basis="unique_candidate"`
 and identity warnings. Those warnings do not prohibit this detail lookup; they
@@ -54,7 +58,7 @@ does not re-query PandaScore, repeat cross-source matching, invent a team-to-sid
 association, or copy resolution warnings into source match facts. The model keeps
 material association uncertainty from the separate resolution result.
 
-## Source policy and capability ownership (accepted; not implemented)
+## Source policy and capability ownership (implemented)
 
 `GameDetailService` owns a fixed source plan below the existing capability seam:
 
@@ -94,8 +98,21 @@ unavailability (not found, timeout, rate limit, or provider error) leaves only i
 dependent groups unavailable, with a safe source-failure reason in coverage;
 it never becomes an empty event list. Cancellation, unexpected programming errors,
 and local resource/storage failures keep their normal error behavior. No failed
-read is entered as a successful `sources` entry. Existing registration/configuration
-still applies until the implementation migration explicitly changes it.
+read is entered as a successful `sources` entry.
+
+The implemented tool registers when `DOTAMIND_STRATZ_TOKEN` is configured.
+`DOTAMIND_OPENDOTA_ENABLED=true` enables supplements and continues to govern the
+resolver's OpenDota access. STRATZ's default timeout is 30 seconds, configurable
+through `DOTAMIND_STRATZ_TIMEOUT_SECONDS`; explicit environment values still win.
+No new provider-selection flag is added.
+
+One narrowly supported partial GraphQL response is an error whose path identifies
+an existing player's optional `playbackData` subtree. The adapter validates the
+remaining primary record and retains only safe field-issue paths, not error
+messages. Coverage records the unavailable playback fields; fixed supplemental
+groups still work. Root, identity, unknown/unscoped errors, and transport failures
+remain errors. Other STRATZ clients retain their default rejection of GraphQL
+errors. Do not relabel this partial response as complete replay coverage.
 
 The [STRATZ source reference](../reference/stratz-game-detail.md) records verified
 sample facts and remaining semantic gates. It is not an exhaustive API schema.
@@ -196,10 +213,10 @@ coverage gap, not a guessed hero ID. This contract adds no request-time static
 Catalog/constant fetch. Hero/item/ability IDs also require namespace validation
 before Catalog lookup.
 
-## Section contracts (accepted target)
+## Section contracts (implemented schema)
 
-The sections below replace the current OpenDota-only field mappings during the
-migration. Unverified source meanings remain explicit limitations; a new source
+The sections below define the public projection. Unverified source meanings
+remain explicit limitations; a new source
 mapping must pass its semantic gate before it supplies a strongly named field.
 
 ### 1. `match`
@@ -424,8 +441,11 @@ DEATH records. Additional encodings and historical cases still require the
 verification below; these samples do not prove universal completeness.
 
 OpenDota `players[].deaths_log`, when present, supplies explicit death facts;
-`kills_log` may supplement confirmed victims through exact same-game hero
+`kills_log` supplements victims without a selected usable death log through exact same-game hero
 association. It misses non-player killers and is not a complete death log.
+Select one death source for each victim before adding events; this fallback does
+not merge duplicate direct-death and kill-log rows. Its known counts remain
+partial even if they happen to equal the final total.
 `killed_by` is an aggregate, not a timestamped event list. Keep useful aggregate
 facts in coverage; do not fabricate individual timed events or attackers from a
 count difference. A supported individual death with unknown time remains a row
@@ -557,8 +577,8 @@ generate repetitive warnings; missing promised logs/times do.
 ## Illustrative target fragments
 
 The values below come from the saved OpenDota response for game `9040460429`.
-They illustrate retained facts with target field names, not a completed STRATZ
-implementation or a claim that every source supplies them. Bilingual labels
+They illustrate retained facts under the implemented names, not a complete result
+or a claim that every source supplies them. Bilingual labels
 come from the local Catalog.
 
 The source start time converts to the Beijing calendar date shown. The formal duration is 2,904 seconds; `radiant_win=false` maps to a Dire win. The source score is 17–33.
@@ -620,12 +640,12 @@ This contract does not promise a DTO byte-size target. The old 105 KB and 215 KB
 | Time/metric gate | Verify each STRATZ point/interval series and bucket boundary; test negative, exact-minute, between-minute, and terminal times. Sample XP agreement alone does not validate farming, gold, or team arrays. |
 | Income gate | Do not replace OpenDota cumulative income until STRATZ complete-income coverage is verified. Same-instant terminal inputs are required for the final gap; null remains correct while absent. |
 | Payload/identity gate | Verify team names, event actor/target namespaces, ability-level semantics, non-hero NPC constants by game version, and actual source errors before enabling those mappings. |
-| Public migration acceptance | Add deterministic projection/Service/Artifact tests for the target schema and fixed supplemental table, then real-provider and model checks. Update current tool descriptions and fixtures in the implementation commits; this documentation update does not change them. |
+| Public acceptance | Deterministic projection/Service/Artifact checks cover the schema, source table, partial GraphQL responses, source reuse, and errors. Three live complete reads and frozen-source model checks are distinct evidence in EVALS; neither guarantees all future provider requests. |
 | Implemented resolver boundary to preserve | `esports.game.resolve` retains complete reads internally and publishes only the resolution evidence owned by the cross-source contract in `DATA.md`. Its Artifact cannot retrieve candidate detail bodies or full source collections. Preserve this separation when extending the governed `game.detail` DTO. |
 | Non-blocking separation | Static names are locally materialized with their own provenance. They do not complete missing historical match facts. Images, frontend behavior, automated unit-data refresh, and deployment remain outside this change. |
 
-The source policy and economic naming are accepted. The STRATZ-first public
-switch remains unimplemented. The sampled candidate death rule and other
+The source policy, economic names, and STRATZ-first public switch are implemented.
+The sampled initial death rule and other
 unverified mappings must pass their gates; an explicit limitation is preferable
 to guessing. Preserve the implemented internal record split and resolver
 public-evidence boundary throughout this migration.
@@ -634,6 +654,6 @@ public-evidence boundary throughout this migration.
 
 The data boundary and migration notes live in [`../DATA.md`](../DATA.md). Tool behavior is summarized in [`../TOOLS.md`](../TOOLS.md), layer ownership in [`../ARCHITECTURE.md`](../ARCHITECTURE.md), deterministic acceptance in [`../EVALS.md`](../EVALS.md), and implementation order in [`../ROADMAP.md`](../ROADMAP.md).
 
-Existing deterministic checks establish the earlier OpenDota projection only.
-The new reference records live source observations, not passing tests for an
-unwritten projection, frontend behavior, or model answer accuracy.
+Deterministic checks establish the implemented boundaries. The reference records
+live observations; model checks use fixed source snapshots. These do not establish
+frontend behavior or universal analytical correctness.

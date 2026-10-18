@@ -47,7 +47,7 @@ class StratzGraphQLClient:
         *,
         graphql_url: str,
         token: str,
-        timeout_seconds: float = 20.0,
+        timeout_seconds: float = 30.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
@@ -63,6 +63,8 @@ class StratzGraphQLClient:
         self,
         query: str,
         variables: dict[str, Any],
+        *,
+        allow_partial_data: bool = False,
     ) -> dict[str, Any]:
         headers = {
             "Accept": "application/json",
@@ -98,7 +100,7 @@ class StratzGraphQLClient:
         errors = payload.get("errors")
         if errors is not None and not isinstance(errors, list):
             raise StratzResponseError("errors")
-        if errors:
+        if errors and (not allow_partial_data or not isinstance(payload.get("data"), dict)):
             raise StratzGraphQLError()
         return payload
 

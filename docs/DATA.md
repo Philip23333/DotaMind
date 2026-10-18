@@ -1160,95 +1160,40 @@ one participant returned 20 rows with nonincreasing raw timestamps under
 `8960882635` predates the oldest row in that bounded sample and was not
 returned. This verifies one account/query sample, not general provider
 availability or universal ordering behavior.
-`game.detail` currently registers only when `DOTAMIND_OPENDOTA_ENABLED` is
-true. Its adapter preserves the complete validated source object internally,
-including JSON extensions, null values, zeroes, and booleans. The returned positive
-`match_id` must equal the requested Valve ID; known fields are type-checked
-when present. Anonymous player rows and absent optional or parsed fields are
-valid. Missing process data does not prove an event did not occur, and the
-lookup does not trigger replay parsing. Tests use HTTP mocks. The earlier live
-cross-source check of `8960882635` is a single-match observation, not live
-verification of this new client. The target projection and its source/missing
-rules are owned by [`agent/game_detail_data.md`](agent/game_detail_data.md);
-the public implementation returns that DTO rather than the full source object.
+### Governed single-game detail
 
-The current pure OpenDota projector and closed eight-section `GameDetailData` are
-implemented and connected to the public Service. They include source-aligned
-minutes, final statistics, typed bilingual entities/units, normalized objective
-types, direct hero interactions, and scalar coverage evidence. The source fixture
-still contains excluded fields, so tests protect projection boundaries. The
-implemented baseline has competition null and ten final-stat fields. The accepted
-STRATZ-first target below changes mappings and selected fields; it is not yet
-implemented. Unverified source semantics remain explicit unknowns.
+`game.detail` registers with `DOTAMIND_STRATZ_TOKEN`. Its STRATZ primary read
+validates `match.id` against the requested `valve_game_id`; fixed OpenDota
+supplements are enabled by `DOTAMIND_OPENDOTA_ENABLED`. The STRATZ timeout
+defaults to 30 seconds through `DOTAMIND_STRATZ_TIMEOUT_SECONDS`; OpenDota keeps
+its independently configured timeout. Environment values override defaults.
 
-The internal read and public result types are separate. The OpenDota adapter's
-`get_game_record(match_id)` validates source identity and known fields, then
-returns `OpenDotaGameRecord(match_id, provider, retrieved_at, data)`. It does not
-depend on the model-facing `GameDetailInput` or `GameDetailResult`. The identity
-resolver reads that internal record directly, retaining exact timestamps and
-source team IDs for its offline checks.
+Both adapters preserve complete validated internal source records. OpenDota's
+`OpenDotaGameRecord` still serves the identity resolver, retaining precise source
+time and side-specific team IDs. STRATZ has its own `StratzGameRecord`, including
+safe optional-field issue paths. Ordinary errors are not converted into empty
+business facts. A narrowly scoped GraphQL error in an existing player's optional
+`playbackData` may preserve the validated primary record; root/identity and
+unknown errors fail. Other STRATZ clients still reject GraphQL errors by default.
 
-`GameDetailService.get_game_detail(GameDetailInput)` calls that same adapter once
-and constructs the separate public `GameDetailResult`, mapping internal
-`match_id` to `valve_game_id` while retaining provider and retrieval time. It
-pins one active local entity repository before the source read and projects the
-record with that resolver and one loaded unit resource. Its outer result includes
-`catalog_version` and `unit_mapping_version`. Public and internal data do not
-share mutable values.
-The Service adds no provider requests, retries, cache, or fallback; structured
-errors and cancellation propagate unchanged. Product wiring shares one adapter
-and client between this Service and the resolver, not one public result type.
+`GameDetailService` pins the entity Catalog and unit resource before reading,
+then projects the STRATZ facts and fixed supplemental groups into the eight-section
+DTO. It reuses the existing request-scoped source cache, including a resolver's
+OpenDota detail read. Primary source and supplement have separate retrieval
+times in `sources`; group/event paths identify actual provenance. There is no
+dynamic router, model-operated provider fallback, retry loop, or raw-object
+Artifact side channel. Cancellation and unexpected local failures propagate.
 
-### Current game detail projection (OpenDota baseline; deterministic checks passed)
-
-The model-facing input remains `game.detail(valve_game_id)`. The outer
-`valve_game_id`, `provider`, and `retrieved_at` fields remain unique
-provenance metadata. The target also records one `catalog_version` and one
-`unit_mapping_version` in this outer envelope. The `data` value contains the eight sections
-`match`, `draft`, `players`, `economy`, `builds`,
-`events`, `interactions`, and `coverage`. The source identity is
-validated before mapping. The complete governed DTO, rather than the raw
-OpenDota response, is the logical detail result stored by generic Artifact
-externalization.
-
-The contract owner is
-[`agent/game_detail_data.md`](agent/game_detail_data.md). It deliberately
-separates source facts from deterministic date, count, ordering, and enum
-transformations. It defines the confirmed final-stat minimum, player sides,
-minimal source-team identities, build fields, death records, hero-only direct
-interaction maps, and structured missing/conflict records. The first version
-deliberately leaves competition null and excludes additional final statistics.
-Its accepted bilingual hero/item/ability objects keep canonical IDs. Exact
-source keys resolve before output; unconvertible keys and opaque codes become
-field-specific scalar coverage evidence rather than model-facing business keys.
-Unknown provider semantics remain limitations, not another scope-approval round.
-
-Non-hero unit names and types live in a separate versioned static resource
-queried through Catalog. This is independent of the existing five-file entity
-Catalog publication protocol; it adds no request-time fetch or automatic unit
-refresh in this migration. Capture one entity repository and one unit resource
-per detail operation. Name/ID misses are local gaps; unexpected resolver or
-resource failures must not be disguised as missing source keys. Generic unit
-default teams do not establish live ownership. The evidence and verified sample
-mapping table are in
+The complete public DTO is stored by generic Artifact handling. The schema,
+source mappings and failure policy are owned by
+[`agent/game_detail_data.md`](agent/game_detail_data.md). Local bilingual labels
+retain their separate `catalog_version` and `unit_mapping_version`; unmapped
+source scalars stay only in coverage. This does not change Catalog publication,
+refresh units remotely, or infer historical mechanics or live unit ownership.
+The OpenDota unit reference remains in
 [`reference/opendota-unit-identifiers.md`](reference/opendota-unit-identifiers.md).
 
-The internal-consumer split is implemented: the resolver uses
-`OpenDotaGameRecord`, while `GameDetailService` owns construction of
-`GameDetailResult`. The public projection occurs at this Service boundary without
-changing the resolver's record. Any converter that consumes a game must retain the
-precise validated source timestamp and source team identities until it has
-finished using them. A model-facing DTO or Artifact must not expose the original
-detail as a raw member or equivalent retrieval path. The resolver already keeps
-complete source collections internal and exposes only the resolution evidence
-defined above. Preserve that boundary when implementing the separate detail DTO.
-
-The closed scope, source-semantic limits, and remaining implementation work are
-enumerated in the owner contract. This target
-does not select frontend rendering, an HTTP shape, persistent storage, replay
-parsing, or deployment changes.
-
-### Accepted STRATZ-first game detail governance (not implemented)
+### Implemented STRATZ-first game detail governance
 
 The sole field/type/source owner is
 [`agent/game_detail_data.md`](agent/game_detail_data.md). It keeps the eight
@@ -1268,8 +1213,9 @@ stay internal. This does not replace the resolver's OpenDota read/evidence path.
 - Construct `events.hero_deaths` once from verified source facts; retain known
   time and supported unknown-time rows. `known_deaths` counts only located events
   through each minute, while final `deaths` stays the source total. Aggregates do
-  not fabricate individual deaths. The STRATZ DEATH-gold association remains a
-  candidate rule requiring additional samples, not a raw-list filter.
+  not fabricate individual deaths. The initial STRATZ DEATH-gold association is
+  checked against three samples; additional encodings remain unknown. It is not
+  a raw-list filter or an amount-equality rule.
 - STRATZ explicit Tormentor messages are usable; initial Roshan/Aegis/concrete
   building groups use OpenDota explicit objectives. A `ROSHAN` gold reason also
   appears at Tormentor times in the sample and is not a Roshan-kill predicate.
@@ -1286,13 +1232,14 @@ an empty list or silent whole-provider failover. Existing cancellation, local
 resource, storage, and programming-error behavior remains intact. See the owner
 for the exact failure policy, namespace validation, and implementation gates.
 The [source reference](reference/stratz-game-detail.md) records live comparison
-facts for `8960991322`; it does not certify the unwritten projection or general
-coverage. Current registration flags and implementation remain unchanged.
+facts for `8960991322`; it does not certify universal availability or general
+coverage. Tool registration, descriptions, schemas and fixed supplements now
+implement this initial policy; unverified optional mappings stay unavailable.
 
 ## Account-to-game evidence and local catalog labels
 
 The user-facing path composes existing observations: a Steam32 ID selects a
-STRATZ recent-games result; a chosen `valve_game_id` selects one OpenDota game;
+STRATZ recent-games result; a chosen `valve_game_id` selects one governed game detail;
 the requested player's row is identified only by exact `account_id`. The
 conversation history and generic Artifact references retain the list and large
 detail response for follow-ups such as “the second game”; there is no separate

@@ -16,6 +16,8 @@ from app.vnext.llm.protocol import ToolCall
 from app.vnext.providers.opendota.client import OpenDotaClient
 from app.vnext.providers.pandascore.client import PandaScoreClient
 from app.vnext.providers.source_reads import source_read_scope
+from app.vnext.providers.stratz.client import StratzGraphQLClient
+from tests.vnext.game_detail_fixtures import stratz_facts
 
 _FIXTURE = Path(__file__).parent / "fixtures/game_resolution/epl_final_1606806_identity.json"
 
@@ -31,6 +33,13 @@ def test_trace_final_three_games_resolve_and_continue_to_governed_detail(
 
         async def handle(request):
             requests.append(request)
+            if request.url.host == "stratz.test":
+                valve_id = json.loads(request.content)["variables"]["id"]
+                source = next(
+                    g["detail"] for g in fixture["games"] if g["detail"]["match_id"] == valve_id
+                )
+                # Synthetic primary facts for the chain; the captured trace was OpenDota-only.
+                return httpx.Response(200, json={"data": {"match": stratz_facts(source)}})
             if request.url.host == "pandascore.test":
                 assert request.url.params["filter[id]"] == "1606806"
                 value = fixture["context"]
@@ -70,11 +79,18 @@ def test_trace_final_three_games_resolve_and_continue_to_governed_detail(
             ),
         )
         settings = VNextSettings(
+            stratz_token="offline-test",
+            stratz_graphql_url="https://stratz.test/graphql",
             pandascore_token="offline-test",
             pandascore_base_url="https://pandascore.test",
             opendota_enabled=True,
             opendota_base_url="https://opendota.test/api",
             game_resolution_enabled=True,
+        )
+        monkeypatch.setattr(
+            composition,
+            "StratzGraphQLClient",
+            lambda **kw: StratzGraphQLClient(**kw, transport=transport),
         )
         registry = build_vnext_registry(build_vnext_services(settings), settings=settings)
         search = await registry.execute(
@@ -144,7 +160,7 @@ def test_trace_final_three_games_resolve_and_continue_to_governed_detail(
                     "interactions",
                     "coverage",
                 }
-            assert (cache.remote_reads, cache.cache_hits) == (6, 9)
-        assert len(requests) == 7  # Search + context/directory/list + three details.
+            assert (cache.remote_reads, cache.cache_hits) == (9, 9)
+        assert len(requests) == 10  # Search + six OpenDota reads + three STRATZ primary reads.
 
     asyncio.run(scenario())

@@ -455,10 +455,10 @@ def test_registry_reuses_token_gated_stratz_client_without_network_calls(
     calls = 0
     original_graphql = StratzGraphQLClient.graphql
 
-    async def counted_graphql(self, query, variables):
+    async def counted_graphql(self, query, variables, **options):
         nonlocal calls
         calls += 1
-        return await original_graphql(self, query, variables)
+        return await original_graphql(self, query, variables, **options)
 
     monkeypatch.setattr(StratzGraphQLClient, "graphql", counted_graphql)
     missing_token_registry = build_vnext_registry(settings=VNextSettings(stratz_token=""))
@@ -469,10 +469,12 @@ def test_registry_reuses_token_gated_stratz_client_without_network_calls(
     assert "player.profile" not in {tool.name for tool in missing_token_registry.schemas()}
     assert "player.recent_games" not in {tool.name for tool in missing_token_registry.schemas()}
     assert {"player.profile", "player.recent_games"} <= {tool.name for tool in registry.schemas()}
-    assert "game.detail" not in {tool.name for tool in registry.schemas()}
+    assert "game.detail" in {tool.name for tool in registry.schemas()}
     profile_adapter = services.player_profile.__self__
     recent_adapter = services.player_recent_games.__self__
     assert profile_adapter.client is recent_adapter.client
+    assert services.game_detail.__self__._provider.client is recent_adapter.client
+    assert services.game_detail.__self__._supplement is None
     assert calls == 0
 
 

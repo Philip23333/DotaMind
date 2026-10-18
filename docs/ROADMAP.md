@@ -468,89 +468,46 @@ higher priority.
   timestamps under `orderBy: DESC`, each containing only that account. The
   supplied match predates that bounded sample. This is sample evidence, not a
   universal ordering or provider-availability guarantee.
-- `game.detail` is implemented through an opt-in OpenDota client and adapter;
-  it registers only when `DOTAMIND_OPENDOTA_ENABLED=true`. It validates returned
-  `match_id` identity, preserves the complete source object, and uses generic
+- `game.detail` is implemented through STRATZ with opt-in OpenDota supplemental
+  groups. A STRATZ token registers the tool; each source validates the requested
+  Valve identity and preserves its complete internal record. It uses generic
   Artifact handling. It does not submit or poll replay parsing. Deterministic
-  HTTP-mock tests do not establish live OpenDota availability. The prior
-  `8960882635` cross-source ID check remains single-match evidence only.
+  HTTP-mock tests do not establish universal provider availability. Later
+  three-game Service checks and fixed-source model acceptance are in EVALS.
 
-### Current OpenDota eight-section projection (baseline implemented)
+### Governed STRATZ-first game detail (implemented; bounded acceptance)
 
-The current baseline and accepted next contract are distinguished in
-[`agent/game_detail_data.md`](agent/game_detail_data.md). `game.detail(valve_game_id)`
-returns the complete governed DTO through generic Artifact handling. It preserves
-match provenance, adds one Catalog version and one unit-mapping version, and
-provides bilingual entity/unit objects, normalized objective types, and scalar
-failed-conversion evidence. There is no raw-object member or alternate public
-retrieval route. Frontend, HTTP route, persistence, replay, automatic unit refresh,
-and deployment changes remain outside this migration.
+The [owner contract](agent/game_detail_data.md) defines the current public DTO.
+Implemented boundaries are:
 
-Implemented boundaries:
+1. STRATZ and OpenDota validate independent internal source records. STRATZ is
+   primary; fixed OpenDota groups supplement income, initially unverified minute
+   series, explicit objective categories and supported auxiliary facts. The
+   resolver retains its complete OpenDota record and public evidence boundary.
+2. The governed schema removes minute net worth, names cumulative income/XP,
+   keeps terminal statistics separate, and exposes a final gap only with reliable
+   same-instant inputs. Normalized death facts supply located counts and coverage
+   without fabricating residual deaths or guessing attackers.
+3. Explicit inventory observations, purchases and timed upgrades stay separate.
+   Local bilingual entities/units and source-specific coverage accompany the
+   complete DTO in Artifact storage. Generic Runtime/Artifact responsibilities
+   and configured result bounds are unchanged.
+4. The Service, registration, descriptions and source-cache reuse are connected.
+   A token enables STRATZ detail; OpenDota supplements remain separately enabled.
+   Optional playback-field GraphQL failures preserve validated core facts with
+   coverage; root/identity and unknown errors remain failures.
 
-1. The OpenDota adapter validates identity and retains complete internal
-   `OpenDotaGameRecord` values. The resolver still uses exact timestamps,
-   source team IDs, and its accepted same-game associations from those records.
-2. The resolver publishes only its resolution evidence, excluding candidate
-   bodies and full source collections from its Artifact.
-3. Pure source projection retains the eight sections, same-player minute axes,
-   inclusive kill/death counts, final statistics, ordered builds, events,
-   hero-only interactions, and explicit missing/conflict semantics.
-4. Local Catalog resolution supplies hero/item/ability names. A separately
-   versioned `UnitCatalog` supplies 117 verified non-hero mappings. Exact indexes
-   resolve keys; known IDs survive missing names. Unknown keys/codes stay scalar
-   evidence in coverage, and fixed objective types include courier/Tormentor
-   events. Static default teams do not identify live unit ownership.
-5. `GameDetailService` pins the active entity repository before its source read,
-   projects the public DTO, and records static-resource versions. Registry,
-   generic Artifact, selected-account, and composed esports-resolution tests
-   verify this boundary without model Catalog calls merely to decode names.
+[Acceptance](EVALS.md) distinguishes focused deterministic checks, three complete
+live detail reads and four fixed-source model questions. Live latency and optional
+playback failures are concrete limits, not a claim of universal availability.
 
-First-version scope is closed: competition stays null, final stats contain the
-ten approved fields, and team identities retain only their confirmed minimum.
-Unknown neutral-slot/history semantics and actor encodings remain explicit
-limitations. They do not require another scope-approval round. Live OpenDota
-availability, real-model use, and frontend behavior require separate acceptance.
+Remaining source-semantic work is bounded by actual needs: verify additional
+historical NPC/event encodings, STRATZ time buckets and upgrade-level meanings,
+and a complete same-instant terminal-income source before populating those
+fields. Current implementations preserve null/partial coverage for them.
 
-The account-to-game workflow is covered with deterministic Runtime composition:
-the agent can continue from an account's bounded recent-games list to one
-selected match, locate the exact account row, resolve known hero/item labels
-from the local Valve catalog, and keep the prior list available for ordinal
-follow-ups. This verifies scripted orchestration only, not real-model tool
-selection or answer quality. Real provider/model evaluation remains separate.
-
-### STRATZ-first detail governance (accepted design; implementation pending)
-
-The target is owned by [the game-detail contract](agent/game_detail_data.md).
-[Live source observations](reference/stratz-game-detail.md) for `8960991322`
-support the design; this documentation work does not switch the provider or
-establish acceptance of the replacement. Keep implementation boundaries small:
-
-1. Verify fixed STRATZ query selections, source models/identity namespaces,
-   per-series time semantics, and the candidate death-selection rule on the
-   additional real cases in EVALS. Preserve complete internal source records;
-   retain the existing OpenDota resolver path and request-source reuse.
-2. Implement the target economic/death schema and deterministic projection:
-   cumulative-income/XP names, no minute net worth, same-instant-only final gap,
-   normalized deaths plus `known_deaths` and independent final totals. Verify
-   existing exact-time fixture values under the new names.
-3. Add STRATZ build/interaction/event extraction and the fixed OpenDota
-   supplemental groups. Preserve purchases versus observed inventory and timed
-   upgrades; use explicit Tormentor messages and whole-category objective
-   supplements. Unverified encodings remain explicit limitations.
-4. Connect Service composition, multi-source provenance/coverage, errors and
-   actual tool descriptions/registration together. Keep generic Artifact and
-   Runtime unaware of the provider plan; do not add a dynamic router or model
-   fallback workflow. Test the complete public result and resolver boundary.
-5. Run focused deterministic, live-provider, and real-model acceptance in
-   [EVALS](EVALS.md). Only then describe the STRATZ-first switch as implemented.
-
-These are implementation boundaries, not commits already made. Frontend,
-background League-index backfill, replay parsing, new persistent storage, and
-deployment are not part of this data-governance decision. New semantics that fail
-verification stay null/partial with coverage; they are not guessed to meet a
-completeness target. Registration/environment changes belong to implementation,
-not this documentation update.
+Frontend, background League-index backfill, replay parsing, new storage,
+deployment, and ratings/inferred analytics are outside this migration.
 
 ## PandaScore Match to OpenDota game identity (offline path implemented; live Agent evaluation pending)
 

@@ -42,6 +42,8 @@ requires reliable same-final-time inputs and may be null; it is not pure death l
 known_deaths counts only normalized deaths with known times through that sample;
 final_stats.deaths stays the source final total. Check coverage.death_counts for
 unknown-time facts and missing events. Do not treat a partial known count as a total.
+coverage.death_counts.unaccounted_deaths is the final total not covered by matched
+death facts; it does not count deaths with an unidentified killer.
 Build purchase_events, inventory_events and ability_upgrade_events are separate
 source observations. Purchases do not prove assembly, delivery or inventory.
 Use explicit objective events: a gold reason named ROSHAN is not a Roshan kill.

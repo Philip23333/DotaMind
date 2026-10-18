@@ -146,5 +146,15 @@ def test_enabled_registry_rejects_missing_required_services() -> None:
         opendota_enabled=True,
     )
 
-    with pytest.raises(ValueError, match="esports.match.search.*game_resolution.*game.detail"):
+    with pytest.raises(ValueError, match="esports.match.search.*game_resolution"):
         build_vnext_registry(VNextServices(), settings=settings)
+
+
+def test_resolution_registration_does_not_require_the_independent_stratz_detail_source():
+    settings = VNextSettings(
+        game_resolution_enabled=True, pandascore_token="configured-token", opendota_enabled=True
+    )
+    registry = build_vnext_registry(settings=settings)
+    names = {tool.name for tool in registry.schemas()}
+    assert "esports.game.resolve" in names
+    assert "game.detail" not in names

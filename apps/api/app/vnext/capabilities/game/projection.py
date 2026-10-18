@@ -1,16 +1,18 @@
 """Fixed capability-owned STRATZ/OpenDota data groups, independent of Runtime."""
 
+import json
 from collections import Counter
 from copy import deepcopy
 
 from app.vnext.catalog import UnitCatalog
 from app.vnext.providers.opendota.detail_entities import DetailEntities
 from app.vnext.providers.opendota.detail_projection import project_game_detail
+from app.vnext.providers.opendota.detail_values import _is_number
 from app.vnext.providers.opendota.game_detail import OpenDotaGameRecord
 from app.vnext.providers.stratz.detail_projection import project_stratz_detail
 from app.vnext.providers.stratz.game_detail import StratzGameRecord
 
-from .data import CoverageGroup, SourcePath, TargetValue
+from .data import CoverageGroup, HeroDeath, MissingData, SourcePath, TargetValue
 from .death_coverage import apply_death_coverage
 
 
@@ -34,6 +36,89 @@ def _association(player, candidates):
         ):
             matches.append(i)
     return matches[0] if len(matches) == 1 else None
+
+
+def _supplement_kill_deaths(data, record, remapping, available_slots, entities):
+    """Use exact OpenDota hero kill facts only for victims without a selected death log."""
+    slots = Counter(p.identity.player_slot for p in data.players or [])
+    heroes = Counter(p.identity.hero.id for p in data.players or [] if p.identity.hero)
+    matched = {data.players[i].identity.player_slot for i in remapping.values()}
+    by_hero = {
+        p.identity.hero.id: p
+        for p in data.players or []
+        if p.identity.hero
+        and heroes[p.identity.hero.id] == 1
+        and p.identity.player_slot in matched
+        and slots[p.identity.player_slot] == 1
+    }
+    observed = {e.victim_player_slot for e in data.events.hero_deaths or []}
+    eligible = {
+        p.identity.player_slot
+        for p in by_hero.values()
+        if p.identity.player_slot not in observed
+        and (p.identity.player_slot not in available_slots or p.final_stats.deaths != 0)
+    }
+    paths = []
+    if not eligible:
+        return
+    for i, owner in enumerate(record.data.get("players") or []):
+        log = owner.get("kills_log")
+        if not isinstance(log, list) or not all(isinstance(row, dict) for row in log):
+            continue
+        paths.append(SourcePath(source="opendota", path=f"players[{i}].kills_log"))
+        killer = data.players[remapping[i]].identity.player_slot if i in remapping else None
+        for j, row in enumerate(log):
+            key = row.get("key")
+            hero_id = entities.hero_ids.get(key) if isinstance(key, str) else None
+            victim = by_hero.get(hero_id)
+            if victim is None or victim.identity.player_slot not in eligible:
+                continue
+            time = row.get("time")
+            if time is not None and not _is_number(time):
+                data.coverage.missing.append(
+                    MissingData(
+                        path="events.hero_deaths",
+                        reason="OpenDota hero kill time is invalid; retained as unknown time",
+                        source="opendota",
+                    )
+                )
+                time = None
+            if data.events.hero_deaths is None:
+                data.events.hero_deaths = []
+            data.events.hero_deaths.append(
+                HeroDeath(
+                    time_seconds=time,
+                    victim_player_slot=victim.identity.player_slot,
+                    killer_player_slot=killer,
+                    source_paths=[
+                        SourcePath(source="opendota", path=f"players[{i}].kills_log[{j}]")
+                    ],
+                )
+            )
+    if paths:
+        available_slots.update(eligible)
+        data.coverage.groups.append(
+            CoverageGroup(
+                path="events.hero_deaths",
+                status="partial",
+                source_paths=paths,
+                reason=(
+                    "Hero kill logs cover known hero victims only; non-player killers may be absent"
+                ),
+            )
+        )
+        for i, player in enumerate(data.players or []):
+            if player.identity.player_slot in eligible:
+                path = f"players[{i}].minute_timeline.known_deaths"
+                data.coverage.groups[:] = [g for g in data.coverage.groups if g.path != path]
+                data.coverage.groups.append(
+                    CoverageGroup(
+                        path=path,
+                        status="partial",
+                        source_paths=paths,
+                        reason="Known hero-kill deaths only; not a complete death source",
+                    )
+                )
 
 
 def project_detail(
@@ -70,11 +155,20 @@ def project_detail(
     if extra:
         data.match.score = deepcopy(extra.match.score)
         data.economy = deepcopy(extra.economy)
-    group("match.score", "radiant_score", data.match.score if extra else None)
+    score_available = extra is not None and any(
+        value is not None for value in (data.match.score.radiant, data.match.score.dire)
+    )
+    group("match.score", "radiant_score", data.match.score if score_available else None)
     group(
         "economy",
         "radiant_gold_adv",
-        data.economy if extra else None,
+        data.economy
+        if extra is not None
+        and any(
+            series is not None
+            for series in (data.economy.radiant_gold_adv, data.economy.radiant_xp_adv)
+        )
+        else None,
         partial=extra is not None and extra.economy.time_seconds is None,
     )
     for category in ("building_destructions", "roshan_kills", "aegis_pickups"):
@@ -221,8 +315,31 @@ def project_detail(
                 copy.source = "opendota"
                 coverage.missing.append(copy)
 
+    if supplement is not None:
+        _supplement_kill_deaths(data, supplement, remapping, available_slots, entities)
     coverage.death_counts.clear()
     apply_death_coverage(data, available_slots, provider="stratz")
+    if supplement is not None:
+        for old, new in remapping.items():
+            if not coverage.death_counts[new].unaccounted_deaths:
+                continue
+            aggregate = supplement.data["players"][old].get("killed_by")
+            if not isinstance(aggregate, dict):
+                continue
+            for key, count in aggregate.items():
+                if key.startswith("npc_dota_hero_") or not _is_number(count) or count <= 0:
+                    continue
+                unit = units.lookup(key)
+                label = f"{unit.name_zh} / {unit.name_en}" if unit else "unmapped non-hero unit"
+                coverage.missing.append(
+                    MissingData(
+                        path=f"coverage.death_counts[{new}].unaccounted_deaths",
+                        source="opendota",
+                        reason=f"Source killed_by: {label} aggregate; no event times",
+                        source_path=f"players[{old}].killed_by[{json.dumps(key)}]",
+                        source_value=count,
+                    )
+                )
     # One normalized death list also supplies the kill-relation view.
     slots = Counter(p.identity.player_slot for p in data.players or [])
     by_slot = {
@@ -265,4 +382,13 @@ def project_detail(
                 reason="Counts of confirmed normalized death facts only",
             )
         )
+    for entry in coverage.groups:
+        if entry.status == "available" and any(
+            gap.path == entry.path
+            or gap.path.startswith(entry.path + ".")
+            or gap.path.startswith(entry.path + "[")
+            for gap in coverage.missing
+        ):
+            entry.status = "partial"
+            entry.reason = entry.reason or "Some promised fields or mappings are unavailable"
     return data

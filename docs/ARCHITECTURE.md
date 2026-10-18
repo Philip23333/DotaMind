@@ -103,68 +103,45 @@ The model-facing contract never exposes wire routes, credentials, pagination
 syntax, or transport-private IDs. A single provider does not justify a router or
 plugin framework.
 
-### Game-detail data governance (current OpenDota baseline; target migration pending)
+### Game-detail data governance
 
-The current `game.detail` output is the explicit eight-section DTO in
-[`agent/game_detail_data.md`](agent/game_detail_data.md). Source identity
-validation and the projection belong at the capability/provider data boundary.
-Runtime and the generic Artifact processor do not perform gameplay or provider
-field mapping. After migration, generic Artifact handling stores the complete
-governed DTO it receives, and generic reads remain provider-agnostic.
+`game.detail(valve_game_id)` binds to `GameDetailService`. The STRATZ adapter
+validates and retains the primary record; the OpenDota adapter provides fixed
+supplemental groups when enabled. Each validates the exact Valve identity.
+The capability-owned projection combines only the selected data groups after
+same-game player associations, then applies pinned local bilingual labels.
+The owner is [the data contract](agent/game_detail_data.md).
 
-The internal/public type split is implemented. The OpenDota adapter returns
-`OpenDotaGameRecord` using its native `match_id`; it does not import capability
-detail DTOs. The resolver consumes that complete internal record. Product
-composition also gives the same adapter to `GameDetailService`, which owns
-construction of the public `GameDetailResult` and its Valve ID envelope.
-It projects the eight-section DTO here without altering the resolver's input. No provider router or generic conversion
-framework is introduced.
+The OpenDota `OpenDotaGameRecord` remains the resolver's complete internal record.
+The Service and resolver share that adapter and request-scoped source reuse;
+the public result type is independent. The STRATZ adapter retains its own
+`StratzGameRecord`. No public Artifact can retrieve either raw source document.
 
-The closed data model, pure OpenDota projector, local entity/unit enrichment,
-and public Service switch are implemented. Deterministic tests cover registry
-output, generic Artifact storage/reads, and the unchanged internal resolver path.
-They do not establish live-provider coverage or real-model behavior.
+The public envelope identifies STRATZ as primary and attributes successful reads
+separately through `sources`. Group coverage and event paths distinguish actual
+origins, partial observations, mapping gaps and conflicts. A validated primary
+record can survive an explicitly scoped optional `playbackData` GraphQL error;
+safe field paths record the limitation. Root/identity and unscoped errors fail.
+Ordinary supplemental unavailability leaves dependent groups unknown; cancellation,
+programming, local resource and storage errors keep their normal behavior.
 
-The Service captures one active entity Catalog and one versioned local
-unit resource, projects source facts, and resolves names before output validation
-and generic Artifact handling. Explicit hero/item/ability IDs reuse
-`EntityNameResolver`; OpenDota-specific key extraction stays below the capability
-boundary and uses exact indexes. Non-hero mappings are maintained separately and
-exposed through Catalog's local query boundary, without changing the existing
-five-file publication protocol or adding remote unit lookup. Version metadata is
-recorded once per result; existing Artifacts retain the labels originally stored.
-An unrecognized source ID/key or missing locale is a field-specific gap; no fuzzy
-substitution, controller inference, or default-team ownership is added. Unexpected
-resolver/resource failures retain normal error semantics. Runtime, Artifact
-tools, and the identity resolver do not acquire name-conversion responsibilities.
+The capability owns economic naming, normalized deaths, timed build observations,
+and exact unit/entity conversion. Runtime and generic Artifact tools own no
+provider selection or game semantics. Generic Artifact handling stores the complete
+governed DTO and returns bounded observations. No dynamic routing framework,
+model fallback workflow, new storage or replay parser is introduced.
 
-Any game converter must retain exact source time and team identity until it
-uses those facts and must consume an already accepted same-game team-to-side
-association. The resolver also separates internal complete source
-reads from its public evidence projection: its Artifact retains matching
-outcomes and evidence but cannot retrieve candidate detail bodies or full
-source collections. This capability-owned boundary leaves the offline matcher,
-Provider reads, Runtime, and generic Artifact mechanics unchanged. The evidence
-schema is part of the cross-source contract in
-[`DATA.md`](DATA.md).
+One entity Catalog and one versioned local unit mapping are pinned per operation.
+Exact ID/key conversion precedes public validation; missing names do not erase
+known facts. Labels do not infer controllers or historical mechanics. Static
+mapping gaps never become remote Catalog calls. Historical STRATZ NPC encodings
+remain separate from Valve hero IDs.
 
-The accepted STRATZ-first target keeps this capability boundary: the Service
-coordinates a fixed STRATZ primary read and reusable OpenDota supplemental groups,
-then projects the governed DTO with source-specific provenance. It does not add
-provider selection to Runtime, generic Artifact tools, or the model. Each source
-validates the requested Valve identity; same-game player associations and ID
-namespaces must be verified before facts are combined. Successful source reads
-are attributed separately; ordinary supplement unavailability affects only its
-groups, while identity/root failures retain structured errors. There is no silent
-whole-provider failover or dynamic routing framework.
-
-The economic renames, normalized death facts, timed build observations, and
-multi-source envelope are accepted but unimplemented. Additional STRATZ semantic
-gates are owned by [the data contract](agent/game_detail_data.md); live source
-facts are in [the STRATZ reference](reference/stratz-game-detail.md). The existing
-OpenDota internal-record/resolver split and request-source reuse must survive
-this migration. No frontend, replay parser, background index, or new storage
-subsystem is required by this decision.
+[Source evidence](reference/stratz-game-detail.md) and [acceptance](EVALS.md)
+distinguish deterministic checks, three live detail reads, and fixed-source model
+questions. Unverified arrays, upgrade levels, complete terminal income and
+additional historical event encodings remain explicit limits. Frontend and a
+background League index are outside this change.
 
 The optional web-search integration is initialized asynchronously in the API
 lifespan before Runtime construction. Synchronous/offline composition performs

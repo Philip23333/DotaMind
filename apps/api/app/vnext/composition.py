@@ -189,7 +189,7 @@ class VNextSettings:
     pandascore_timeout_seconds: float = 20.0
     stratz_graphql_url: str = "https://api.stratz.com/graphql"
     stratz_token: str = field(default="", repr=False)
-    stratz_timeout_seconds: float = 20.0
+    stratz_timeout_seconds: float = 30.0
     opendota_enabled: bool = False
     opendota_base_url: str = "https://api.opendota.com/api"
     opendota_api_key: str = field(default="", repr=False)
@@ -267,7 +267,7 @@ class VNextSettings:
             stratz_token=_env_value("DOTAMIND_STRATZ_TOKEN", "", file_values) or "",
             stratz_timeout_seconds=_parse_positive_finite_float(
                 "DOTAMIND_STRATZ_TIMEOUT_SECONDS",
-                _env_value("DOTAMIND_STRATZ_TIMEOUT_SECONDS", "20", file_values) or "",
+                _env_value("DOTAMIND_STRATZ_TIMEOUT_SECONDS", "30", file_values) or "",
             ),
             opendota_enabled=_parse_bool_value(
                 "DOTAMIND_OPENDOTA_ENABLED",
@@ -789,7 +789,6 @@ def build_vnext_registry(
             for name, service in (
                 ("esports.match.search", resolved_services.match_search),
                 ("game_resolution", resolved_services.game_resolution),
-                ("game.detail", resolved_services.game_detail),
             )
             if service is None
         ]

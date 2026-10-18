@@ -40,7 +40,7 @@ def test_exact_player_time_and_fields_round_trip_without_mutation():
                 "players": [
                     {
                         "identity": {"account_id": 1},
-                        "minute_timeline": [{"time_seconds": 1500, "net_worth": 99}],
+                        "minute_timeline": [{"time_seconds": 1500, "cumulative_gold_earned": 99}],
                     },
                     {
                         "identity": {"account_id": 106305042},
@@ -48,20 +48,20 @@ def test_exact_player_time_and_fields_round_trip_without_mutation():
                             {
                                 "time_seconds": 1200,
                                 "time_label": "20:00",
-                                "net_worth": 8657,
-                                "deaths": 2,
+                                "cumulative_gold_earned": 8767,
+                                "known_deaths": 2,
                             },
                             {
                                 "time_seconds": 1500,
                                 "time_label": "25:00",
-                                "net_worth": 10730,
-                                "deaths": 2,
+                                "cumulative_gold_earned": 10840,
+                                "known_deaths": 2,
                             },
                             {
                                 "time_seconds": 1800,
                                 "time_label": "30:00",
-                                "net_worth": 13885,
-                                "deaths": 2,
+                                "cumulative_gold_earned": 14105,
+                                "known_deaths": 2,
                             },
                         ],
                     },
@@ -77,14 +77,18 @@ def test_exact_player_time_and_fields_round_trip_without_mutation():
             ArtifactQueryInput(
                 ref=ref,
                 expression=expression,
-                fields=["time_seconds", "net_worth", "deaths"],
+                fields=["time_seconds", "cumulative_gold_earned", "known_deaths"],
             )
         )
         assert result.expression == expression
         assert result.returned == 1 and result.next_offset is None and not result.truncated
         record = result.matches[0]
         assert record.path == "data.players.1.minute_timeline.1"
-        assert record.value == {"time_seconds": 1500, "net_worth": 10730, "deaths": 2}
+        assert record.value == {
+            "time_seconds": 1500,
+            "cumulative_gold_earned": 10840,
+            "known_deaths": 2,
+        }
         original = await ArtifactReader(store).read(ref, record.path)
         assert original.value["time_label"] == "25:00"
         assert await store.get(ref) == document
@@ -311,8 +315,8 @@ def test_runtime_query_is_available_in_both_stages(answer_stage):
         ref = await store.put(
             {
                 "rows": [
-                    {"time_seconds": 1200, "net_worth": 8657},
-                    {"time_seconds": 1500, "net_worth": 10730},
+                    {"time_seconds": 1200, "cumulative_gold_earned": 8767},
+                    {"time_seconds": 1500, "cumulative_gold_earned": 10840},
                 ]
             }
         )
@@ -327,7 +331,7 @@ def test_runtime_query_is_available_in_both_stages(answer_stage):
                         arguments={
                             "ref": ref,
                             "expression": "$.rows[?@.time_seconds == 1200]",
-                            "fields": ["time_seconds", "net_worth"],
+                            "fields": ["time_seconds", "cumulative_gold_earned"],
                         },
                     )
                 ]
@@ -345,7 +349,10 @@ def test_runtime_query_is_available_in_both_stages(answer_stage):
         assert result.content == "answer"
         observed = next(m for m in model.requests[-1].messages if isinstance(m, ToolResultMessage))
         assert observed.status == "ok"
-        assert observed.content["matches"][0]["value"] == {"time_seconds": 1200, "net_worth": 8657}
+        assert observed.content["matches"][0]["value"] == {
+            "time_seconds": 1200,
+            "cumulative_gold_earned": 8767,
+        }
         assert all(any(t.name == "artifact.query" for t in r.tools) for r in model.requests)
 
     asyncio.run(run())

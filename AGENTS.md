@@ -169,7 +169,7 @@ game.detail(valve_game_id)
   ↓
 GameDetailService
   ↓
-OpenDota implementation / adapter (`match_id` internally)
+STRATZ primary adapter + fixed OpenDota supplemental groups (`match_id` internally)
   ↓
 validated source entity and capability-owned output contract
   ↓
@@ -178,9 +178,9 @@ generic Artifact handling + bounded observation
 
 The current `game.detail` output is the explicit eight-section DTO owned by [`docs/agent/game_detail_data.md`](docs/agent/game_detail_data.md), with local bilingual entity/unit names and version provenance. Complete OpenDota source records remain internal to validation and identity resolution.
 
-The accepted next detail implementation uses STRATZ as primary and fixed
+The current detail implementation uses STRATZ as primary and fixed
 OpenDota supplemental groups inside `GameDetailService`, as defined by that
-owner contract. This is a documented target, not the current provider switch.
+owner contract. Both providers retain separate validated internal records.
 Do not move provider choice to the model or Runtime, build a routing framework,
 or replace the resolver's internal OpenDota/evidence boundary. Validate each
 source's Valve identity and namespaces, attribute mixed-source facts explicitly,
@@ -286,8 +286,9 @@ visible without forcing a new identity lookup. A model may continue to
 choose an ID from an unresolved result. Owner contracts are in `docs/DATA.md`
 and `docs/TOOLS.md`; keep shared stage instructions consistent with both.
 
-A second provider may justify a shared Provider protocol/router later. One
-provider alone does not justify speculative provider-selection machinery; the
+Multiple sources do not by themselves justify a Provider router. The current
+detail Service uses one fixed STRATZ-primary/OpenDota-supplement plan. Add shared
+provider-selection machinery only when a concrete need earns its cost; the
 capability boundary itself is the required seam.
 
 # Capability Rules
@@ -298,8 +299,9 @@ The target model-facing capability layer is intentionally small.
   PandaScore-oriented tool; it is not currently registered. PandaScore is the
   provider, not a separate model-facing namespace.
 - `game.detail` is the detailed recorded-game capability. Its public identity is
-  `valve_game_id`; OpenDota is its current implementation and may use `match_id`
-  internally.
+  `valve_game_id`; STRATZ is primary and OpenDota supplies fixed supplemental
+  groups while retaining native `match_id` internally. Optional playback-field
+  errors preserve validated core facts with coverage; root/identity errors fail.
 - Future providers join an existing capability when they provide the same broad
   observation need. Do not first design a universal League/Series/Match or game
   detail DTO for them.
