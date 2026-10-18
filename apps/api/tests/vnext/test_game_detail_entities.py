@@ -36,7 +36,7 @@ def test_empty_slots_unknown_ids_and_skill_repeats_have_distinct_meanings() -> N
         "id": 999999, "name_zh": None, "name_en": None,
     }
     assert build.final_loadout.inventory[1:3] == [None, None]
-    assert [a.id for a in build.ability_upgrade_sequence] == [5003, 0, 5003, 999999]
+    assert [a.ability.id for a in build.ability_upgrade_events] == [5003, 0, 5003, 999999]
     gaps = {m.path: m for m in data.coverage.missing}
     prefix = "builds.players[0].final_loadout.inventory"
     assert f"{prefix}[1]" not in gaps

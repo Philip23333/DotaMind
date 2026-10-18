@@ -23,6 +23,7 @@ from app.vnext.domain.common.time_format import format_game_time
 Number = StrictInt | StrictFloat
 Scalar = StrictStr | Number | StrictBool | None
 Side = Literal["radiant", "dire"]
+Provider = Literal["stratz", "opendota"]
 
 
 class _Data(BaseModel):
@@ -55,6 +56,7 @@ class EntityData(_Data):
 class MissingData(_Data):
     path: str
     reason: str
+    source: Provider | None = None
     source_path: StrictStr | None = None
     source_value: Scalar = None
 
@@ -68,13 +70,14 @@ class MissingData(_Data):
     @model_serializer(mode="wrap")
     def serialize_evidence(self, handler):
         data = handler(self)
-        for key in ("source_path", "source_value"):
+        for key in ("source", "source_path", "source_value"):
             if key not in self.model_fields_set:
                 data.pop(key, None)
         return data
 
 
 class SourceConflict(_Data):
+    sources: list[Provider] = Field(default_factory=list)
     paths: list[str]
     values: list[Scalar]
 
@@ -82,10 +85,36 @@ class SourceConflict(_Data):
     def corresponding_values(self) -> SourceConflict:
         if len(self.paths) < 2 or len(self.paths) != len(self.values):
             raise ValueError("Conflict paths and scalar values must correspond")
+        if not self.sources:
+            self.sources = ["opendota"] * len(self.paths)
+        if len(self.sources) != len(self.paths):
+            raise ValueError("Conflict providers and paths must correspond")
         return self
 
 
+class SourcePath(_Data):
+    source: Provider
+    path: StrictStr = Field(min_length=1)
+
+
+class CoverageGroup(_Data):
+    path: StrictStr
+    status: Literal["available", "partial", "unavailable"]
+    source_paths: list[SourcePath] = Field(default_factory=list)
+    reason: StrictStr | None = None
+
+
+class DeathCounts(_Data):
+    player_slot: StrictInt | None = None
+    final_deaths: StrictInt | None = Field(default=None, ge=0)
+    known_time_deaths: StrictInt | None = Field(default=None, ge=0)
+    unknown_time_deaths: StrictInt | None = Field(default=None, ge=0)
+    unaccounted_deaths: StrictInt | None = Field(default=None, ge=0)
+
+
 class CoverageData(_Data):
+    groups: list[CoverageGroup] = Field(default_factory=list)
+    death_counts: list[DeathCounts] = Field(default_factory=list)
     missing: list[MissingData] = Field(default_factory=list)
     conflicts: list[SourceConflict] = Field(default_factory=list)
 
@@ -148,7 +177,7 @@ class FinalStats(_Data):
     level: StrictInt | None = None
     last_hits: StrictInt | None = None
     denies: StrictInt | None = None
-    net_worth: Number | None = None
+    earned_gold_net_worth_gap: Number | None = None
     hero_damage: Number | None = None
     tower_damage: Number | None = None
     hero_healing: Number | None = None
@@ -156,13 +185,12 @@ class FinalStats(_Data):
 
 class MinuteData(_TimedData):
     time_seconds: StrictInt
-    net_worth: Number | None = None
-    earned_gold: Number | None = None
-    experience: Number | None = None
+    cumulative_gold_earned: Number | None = None
+    cumulative_experience: Number | None = None
     last_hits: Number | None = None
     denies: Number | None = None
     kills: StrictInt | None = None
-    deaths: StrictInt | None = None
+    known_deaths: StrictInt | None = None
 
 
 class PlayerData(_Data):
@@ -211,11 +239,28 @@ class NeutralItemEvent(_TimedData):
     enhancement: EntityData | None = None
 
 
+class InventorySlot(_Data):
+    item: EntityData | None = None
+    charges: Number | None = None
+
+
+class InventoryEvent(_TimedData):
+    inventory: list[InventorySlot | None] = Field(min_length=6, max_length=6)
+    backpack: list[InventorySlot | None] = Field(min_length=3, max_length=3)
+    item_neutral: InventorySlot | None = None
+
+
+class AbilityUpgradeEvent(_TimedData):
+    ability: EntityData | None = None
+    level: StrictInt | None = None
+
+
 class PlayerBuild(_Data):
     player_slot: StrictInt | None = None
     final_loadout: FinalLoadout
     purchase_events: list[PurchaseEvent] | None = None
-    ability_upgrade_sequence: list[EntityData] | None = None
+    inventory_events: list[InventoryEvent] | None = None
+    ability_upgrade_events: list[AbilityUpgradeEvent] | None = None
     neutral_item_history: list[NeutralItemEvent] | None = None
 
 
@@ -261,7 +306,11 @@ class UnitData(_Data):
         return self
 
 
-class HeroDeath(_TimedData):
+class _SourcedEvent(_TimedData):
+    source_paths: list[SourcePath] = Field(default_factory=list)
+
+
+class HeroDeath(_SourcedEvent):
     victim_player_slot: StrictInt | None = None
     killer_player_slot: StrictInt | None = None
     killer_unit: UnitData | None = None
@@ -276,11 +325,11 @@ class HeroDeath(_TimedData):
         return _checked_time_label(info.data.get("time_dead_seconds"), label)
 
 
-class BuybackEvent(_TimedData):
+class BuybackEvent(_SourcedEvent):
     player_slot: StrictInt | None = None
 
 
-class ObjectiveEvent(_TimedData):
+class ObjectiveEvent(_SourcedEvent):
     type: (
         Literal[
             "building_destruction",

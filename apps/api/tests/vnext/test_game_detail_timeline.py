@@ -16,13 +16,12 @@ def test_saved_game_minutes_remain_distinct_from_final_statistics() -> None:
     assert p.minute_timeline[10].model_dump() == {
         "time_seconds": 600,
         "time_label": "10:00",
-        "net_worth": 3440,
-        "earned_gold": 2930,
-        "experience": 2383,
+        "cumulative_gold_earned": 2930,
+        "cumulative_experience": 2383,
         "last_hits": 39,
         "denies": 2,
         "kills": 1,
-        "deaths": 0,
+        "known_deaths": 0,
     }
     assert p.minute_timeline[-1].time_seconds == 2880
     assert data.match.duration_seconds == 2904
@@ -49,7 +48,7 @@ def test_logs_include_pre_zero_and_equal_time_events_without_reordering_source()
     data = project(record(raw))
     nodes = data.players[0].minute_timeline
     assert [n.kills for n in nodes] == [1, 2, 3]
-    assert [n.deaths for n in nodes] == [0, 1, 1]
+    assert [n.known_deaths for n in nodes] == [0, 1, 1]
     assert [n.time_seconds for n in nodes] == [0, 60, 180]
     assert nodes[-1].kills != data.players[0].final_stats.kills
     assert data.economy.time_seconds is None
@@ -60,7 +59,7 @@ def test_logs_include_pre_zero_and_equal_time_events_without_reordering_source()
 def test_unavailable_or_invalid_logs_never_generate_a_zero_curve(log) -> None:
     data = project(record(source(players=[player(kills_log=log)])))
     assert [node.kills for node in data.players[0].minute_timeline] == [None, None]
-    assert [node.deaths for node in data.players[0].minute_timeline] == [0, 0]
+    assert [node.known_deaths for node in data.players[0].minute_timeline] == [0, 0]
     assert any(m.path == "players[0].minute_timeline.kills" for m in data.coverage.missing)
 
 
@@ -71,14 +70,13 @@ def test_unknown_or_invalid_player_axis_is_unavailable(axis) -> None:
 
 
 def test_short_curve_does_not_shift_or_truncate_other_curves() -> None:
-    data = project(record(source(players=[player(networth_t=[600], xp_t=[0, None])])))
+    data = project(record(source(players=[player(gold_t=[600], xp_t=[0, None])])))
     nodes = data.players[0].minute_timeline
-    assert [node.net_worth for node in nodes] == [None, None]
-    assert [node.earned_gold for node in nodes] == [0, 100]
-    assert [node.experience for node in nodes] == [0, None]
+    assert [node.cumulative_gold_earned for node in nodes] == [None, None]
+    assert [node.cumulative_experience for node in nodes] == [0, None]
     assert {m.path for m in data.coverage.missing} >= {
-        "players[0].minute_timeline.net_worth",
-        "players[0].minute_timeline.experience",
+        "players[0].minute_timeline.cumulative_gold_earned",
+        "players[0].minute_timeline.cumulative_experience",
     }
 
 
@@ -101,3 +99,30 @@ def test_team_axis_requires_correspondence_not_just_equal_lengths() -> None:
     raw["players"][1]["times"] = [0, 60]
     aligned = project(record(raw))
     assert aligned.economy.time_seconds == [0, 60]
+
+
+def test_unknown_time_deaths_keep_final_total_and_do_not_erase_known_curve():
+    raw = source(players=[player(deaths=3, deaths_log=[{"time": None}, {"time": 60}])])
+    data = project(record(raw))
+    assert data.players[0].final_stats.deaths == 3
+    assert [n.known_deaths for n in data.players[0].minute_timeline] == [0, 1]
+    counts = data.coverage.death_counts[0]
+    assert (counts.known_time_deaths, counts.unknown_time_deaths,
+            counts.unaccounted_deaths) == (1, 1, 1)
+    assert len(data.events.hero_deaths) == 2
+    assert data.events.hero_deaths[0].source_paths[0].source == "opendota"
+
+
+def test_removed_net_worth_is_neither_public_data_nor_a_coverage_gap():
+    data = project(record(source(players=[player(net_worth=1000, networth_t=None)])))
+    stats = data.players[0].final_stats.model_dump()
+    assert "net_worth" not in stats and stats["earned_gold_net_worth_gap"] is None
+    assert all("net_worth" not in n.model_dump() for n in data.players[0].minute_timeline)
+    assert not any(m.path.endswith(".net_worth") for m in data.coverage.missing)
+
+
+def test_excess_death_evidence_is_not_forced_to_match_final_count():
+    data = project(record(source(players=[player(deaths=0, deaths_log=[{"time": 60}])])))
+    assert data.coverage.death_counts[0].unaccounted_deaths is None
+    assert data.coverage.death_counts[0].known_time_deaths == 1
+    assert any("exceeds final" in m.reason for m in data.coverage.missing)

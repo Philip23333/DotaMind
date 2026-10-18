@@ -144,7 +144,7 @@ def test_saved_game_labels_survive_public_dto_roundtrip_without_changing_source(
     yatoro = next(p for p in data.players if p.identity.account_id == 321580662)
     assert yatoro.minute_timeline[20].time_seconds == 1200
     assert yatoro.minute_timeline[20].time_label == "20:00"
-    assert yatoro.minute_timeline[20].net_worth == 7266
+    assert yatoro.minute_timeline[20].cumulative_gold_earned == raw["players"][1]["gold_t"][20]
     build = next(b for b in data.builds.players if b.player_slot == 1)
     manta = next(p for p in build.purchase_events if p.item.id == 147)
     assert (manta.time_seconds, manta.time_label) == (1478, "24:38")

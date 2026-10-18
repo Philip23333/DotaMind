@@ -8,6 +8,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.vnext.capabilities.game.data import (
+    AbilityUpgradeEvent,
     BuildsData,
     CoverageData,
     DraftAction,
@@ -25,6 +26,7 @@ from app.vnext.capabilities.game.data import (
     TeamData,
     TeamsData,
 )
+from app.vnext.capabilities.game.death_coverage import apply_death_coverage
 from app.vnext.catalog import UnitCatalog
 
 from .detail_entities import DetailEntities
@@ -35,7 +37,7 @@ from .detail_values import ABSENT, _missing, _rows, _value
 from .game_detail import OpenDotaGameRecord
 
 _FINAL_INTEGERS = ("kills", "deaths", "assists", "level", "last_hits", "denies")
-_FINAL_NUMBERS = ("net_worth", "hero_damage", "tower_damage", "hero_healing")
+_FINAL_NUMBERS = ("hero_damage", "tower_damage", "hero_healing")
 
 
 def _side(value: Any) -> str | None:
@@ -127,6 +129,8 @@ def _player(
         **{key: _value(source, key, float, f"{path}.final_stats.{key}", coverage)
            for key in _FINAL_NUMBERS},
     )
+    _missing(coverage, f"{path}.final_stats.earned_gold_net_worth_gap",
+             "Reliable same-instant terminal cumulative income is unavailable")
     return PlayerData(identity=identity, final_stats=stats,
                       minute_timeline=project_minutes(source, i, coverage))
 
@@ -161,13 +165,13 @@ def _build(
         type(item) is int and item >= 0 for item in upgrades
     )):
         upgrades = None
-        _missing(coverage, f"{path}.ability_upgrade_sequence",
+        _missing(coverage, f"{path}.ability_upgrade_events",
                  "Source ability_upgrades_arr is unavailable or invalid")
     else:
-        upgrades = [entities.by_id(
-            identifier, "ability", f"{path}.ability_upgrade_sequence[{j}]",
+        upgrades = [AbilityUpgradeEvent(ability=entities.by_id(
+            identifier, "ability", f"{path}.ability_upgrade_events[{j}].ability",
             f"{source_path}.ability_upgrades_arr[{j}]", coverage,
-        ) for j, identifier in enumerate(upgrades)]
+        )) for j, identifier in enumerate(upgrades)]
     history = _rows(source.get("neutral_item_history"), f"{path}.neutral_item_history", coverage)
     neutral_events = None if history is None else [NeutralItemEvent(
         time_seconds=_value(row, "time", float, "", coverage, required=False),
@@ -183,7 +187,7 @@ def _build(
     return PlayerBuild(
         player_slot=_value(source, "player_slot", int, f"{path}.player_slot", coverage),
         final_loadout=FinalLoadout(**loadout), purchase_events=purchase_events,
-        ability_upgrade_sequence=upgrades, neutral_item_history=neutral_events,
+        ability_upgrade_events=upgrades, neutral_item_history=neutral_events,
     )
 
 
@@ -196,7 +200,7 @@ def project_game_detail(
         raise ValueError("Source match_id must equal the internal record identity")
     coverage = CoverageData()
     players = _rows(source.get("players"), "players", coverage)
-    return GameDetailData(
+    result = GameDetailData(
         match=_match(source, coverage), draft=_draft(source, entities, coverage),
         players=None if players is None else [
             _player(player, i, entities, coverage) for i, player in enumerate(players)
@@ -209,3 +213,9 @@ def project_game_detail(
         interactions=project_interactions(players, entities, coverage),
         coverage=coverage,
     )
+    apply_death_coverage(result, {
+        p["player_slot"] for p in players or []
+        if type(p.get("player_slot")) is int and isinstance(p.get("deaths_log"), list)
+        and all(isinstance(d, dict) for d in p["deaths_log"])
+    }, provider="opendota")
+    return result

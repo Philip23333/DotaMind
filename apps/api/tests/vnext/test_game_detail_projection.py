@@ -80,7 +80,7 @@ def test_saved_game_static_facts_and_closed_eight_section_contract() -> None:
     assert p.identity.side == "radiant"
     assert p.final_stats.model_dump() == {
         "kills": 3, "deaths": 6, "assists": 4, "level": 25, "last_hits": 605,
-        "denies": 3, "net_worth": 26064, "hero_damage": 14456,
+        "denies": 3, "earned_gold_net_worth_gap": None, "hero_damage": 14456,
         "tower_damage": 686, "hero_healing": 0,
     }
     text = data.model_dump_json()
@@ -126,7 +126,8 @@ def test_builds_keep_slots_parts_partial_history_and_skill_order() -> None:
     assert [e.item.id for e in build.purchase_events] == [14, 147]
     assert build.purchase_events[0].time_seconds == -89
     assert build.purchase_events[0].charges == 2
-    assert [a.id for a in build.ability_upgrade_sequence] == [5003, 5004, 730]
+    assert [a.ability.id for a in build.ability_upgrade_events] == [5003, 5004, 730]
+    assert all(a.time_seconds is None for a in build.ability_upgrade_events)
     assert build.neutral_item_history[0].item is None
     assert build.neutral_item_history[0].enhancement.name_en == "Vital"
     assert data.players[0].final_stats.kills == 0

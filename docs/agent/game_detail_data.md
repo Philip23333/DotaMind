@@ -523,8 +523,10 @@ Each `death_counts` entry contains `player_slot`, `final_deaths`,
 integers. Counts of known/unknown-time facts come from normalized rows, not raw
 lists or invented residual events. `unaccounted_deaths` is final minus those two
 counts only when all operands are known and the event association is unambiguous;
-an excess or conflict produces null and a conflict entry, never a negative gap
-or forced reconciliation. Unknown source coverage is null, not zero.
+an excess or ambiguous association produces null and an explicit coverage reason,
+never a negative gap or forced reconciliation. Preserve the observed counts;
+do not fabricate source scalar paths for derived counts. Actual source-scalar
+disagreements still use `conflicts`. Unknown source coverage is null, not zero.
 
 For example, an unavailable death source explains
 `players[1].minute_timeline.known_deaths`; a partial source explains its scope

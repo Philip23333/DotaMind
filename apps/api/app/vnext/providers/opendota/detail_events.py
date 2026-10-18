@@ -14,6 +14,7 @@ from app.vnext.capabilities.game.data import (
     HeroDeath,
     ObjectiveEvent,
     SourceConflict,
+    SourcePath,
 )
 from app.vnext.catalog import UnitCatalog
 
@@ -85,6 +86,7 @@ def project_events(
                                      f"{source_path}.key", coverage, units, hero_sides)
                 owners = by_hero.get(unit.hero_id, []) if unit else []
                 death = HeroDeath(
+                    source_paths=[SourcePath(source="opendota", path=source_path)],
                     time_seconds=_value(row, "time", float, "", coverage, required=False),
                     victim_player_slot=owner, killer_unit=unit,
                     killer_player_slot=_known_slot(owners[0], slots) if len(owners) == 1 else None,
@@ -102,6 +104,7 @@ def project_events(
                 path = f"events.buybacks[{len(buybacks)}]"
                 source_path = f"players[{i}].buyback_log[{j}]"
                 event = BuybackEvent(
+                    source_paths=[SourcePath(source="opendota", path=source_path)],
                     time_seconds=_value(row, "time", float, "", coverage, required=False),
                     player_slot=owner,
                 )
@@ -138,6 +141,7 @@ def project_events(
             _missing(coverage, f"{path}.type", "Objective type not mapped",
                      source_path=f"{source_path}.type", source_value=code)
         event = ObjectiveEvent(
+            source_paths=[SourcePath(source="opendota", path=source_path)],
             time_seconds=_value(row, "time", float, "", coverage, required=False), type=kind,
             target_unit=entities.unit(row.get("key", ABSENT), f"{path}.target_unit",
                                       f"{source_path}.key", coverage, units, hero_sides),

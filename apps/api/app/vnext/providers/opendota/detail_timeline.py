@@ -11,7 +11,7 @@ from app.vnext.capabilities.game.data import CoverageData, EconomyData, MinuteDa
 from .detail_values import _is_number, _missing
 
 _MINUTE_FIELDS = {
-    "net_worth": "networth_t", "earned_gold": "gold_t", "experience": "xp_t",
+    "cumulative_gold_earned": "gold_t", "cumulative_experience": "xp_t",
     "last_hits": "lh_t", "denies": "dn_t",
 }
 
@@ -59,7 +59,7 @@ def project_minutes(
             _missing(coverage, f"{path}.{field}", "Source series length differs from times")
             values = None
         columns[field] = values
-    for field, log in (("kills", "kills_log"), ("deaths", "deaths_log")):
+    for field, log in (("kills", "kills_log"),):
         columns[field] = _counts(player.get(log), axis, f"{path}.{field}", coverage)
     return [MinuteData(
         time_seconds=time,

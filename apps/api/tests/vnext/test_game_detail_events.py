@@ -34,6 +34,7 @@ def test_saved_game_event_counts_and_source_conflict_with_exact_catalog_ids() ->
     assert events.first_blood.reported_time_seconds == 0
     assert events.first_blood.objective_events[0].time_seconds == -25
     assert data.coverage.conflicts[0].model_dump() == {
+        "sources": ["opendota", "opendota"],
         "paths": ["first_blood_time", "objectives[0].time"], "values": [0, -25],
     }
     assert events.building_destructions[-1].time_seconds == 2905

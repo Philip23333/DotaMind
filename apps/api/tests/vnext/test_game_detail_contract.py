@@ -43,7 +43,7 @@ def test_game_detail_requires_closed_governed_data_and_unique_label_versions() -
     with pytest.raises(ValidationError, match="timezone"):
         GameDetailResult(**{**arguments, "retrieved_at": datetime(2026, 9, 27)})
     with pytest.raises(ValidationError):
-        GameDetailResult(**{**arguments, "provider": "stratz"})
+        GameDetailResult(**{**arguments, "provider": "unknown"})
     with pytest.raises(ValidationError):
         GameDetailResult(**arguments, raw={"source": True})
 
