@@ -65,6 +65,8 @@ def test_series_search_schema_is_semantic_and_closed() -> None:
         "name",
         "season",
         "year",
+        "begin_at",
+        "end_at",
         "winner_id",
         "tier",
         "page",
@@ -145,3 +147,51 @@ def test_series_search_returns_edition_identity() -> None:
     assert result.status == "ok"
     assert result.content["items"][0]["id"] == 10828
     assert result.content["items"][0]["full_name"] == "2026"
+
+
+@pytest.mark.parametrize(
+    "interval",
+    [
+        {"start": "2026-10-18T00:00:00Z", "end": "2026-09-18T00:00:00Z"},
+        {"start": "2026-09-18T00:00:00", "end": "2026-10-18T00:00:00Z"},
+        {"start": "2026-09-18T00:00:00Z", "end": "2026-10-18T00:00:00"},
+        {"start": "2026-09-18T00:00:00Z"},
+        {"end": "2026-10-18T00:00:00Z"},
+        {"start": "invalid", "end": "2026-10-18T00:00:00Z"},
+        {"start": "2026-09-18T00:00:00Z", "end": "2026-10-18T00:00:00Z", "extra": 1},
+    ],
+)
+@pytest.mark.parametrize("field", ["begin_at", "end_at"])
+def test_series_date_ranges_reject_invalid_bounds(field, interval):
+    with pytest.raises(ValueError):
+        SeriesSearchInput.model_validate({field: interval})
+
+
+def test_series_tool_exposes_and_passes_both_timezone_aware_ranges():
+    received = []
+    registry = ToolRegistry()
+
+    async def search(query):
+        received.append(query)
+        return SeriesSearchResult(items=[], page=query.page, limit=query.limit)
+
+    register_series_tool(registry, search)
+    interval = {"start": "2026-09-18T00:00:00+08:00", "end": "2026-10-18T00:00:00+08:00"}
+    result = asyncio.run(
+        registry.execute(
+            ToolCall(
+                id="series-dates",
+                name="esports.series.search",
+                arguments={"begin_at": interval, "end_at": interval, "limit": 100},
+            )
+        )
+    )
+    assert result.status == "ok"
+    assert received[0].begin_at.start.isoformat() == interval["start"]
+    assert received[0].end_at.end.isoformat() == interval["end"]
+    assert received[0].limit == 100
+    schema = registry.schemas()[0].input_schema
+    bounds = schema["$defs"]["SeriesDateRange"]
+    assert set(bounds["required"]) == {"start", "end"}
+    assert bounds["additionalProperties"] is False
+    assert bounds["properties"]["start"]["format"] == "date-time"

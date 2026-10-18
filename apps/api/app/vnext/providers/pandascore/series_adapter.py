@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 from typing import Any, Literal
 
 from app.vnext.capabilities.esports.dtos import (
@@ -102,11 +103,7 @@ class PandaScoreSeriesAdapter:
             raise ValueError("lifecycle must be 'running' or 'past'")
         if isinstance(page, bool) or not isinstance(page, int) or page < 1:
             raise ValueError("page must be a positive integer")
-        if (
-            isinstance(limit, bool)
-            or not isinstance(limit, int)
-            or not 1 <= limit <= 100
-        ):
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
             raise ValueError("limit must be an integer from 1 to 100")
 
         path, sort_field = {
@@ -173,6 +170,13 @@ class PandaScoreSeriesAdapter:
             params["filter[tier]"] = query.tier
         if query.name is not None:
             params["search[name]"] = query.name
+        for field in ("begin_at", "end_at"):
+            interval = getattr(query, field)
+            if interval is not None:
+                params[f"range[{field}]"] = ",".join(
+                    value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+                    for value in (interval.start, interval.end)
+                )
         return params
 
     @classmethod

@@ -4,6 +4,7 @@ import asyncio
 from typing import Any
 
 import httpx
+import pytest
 
 from app.vnext.capabilities.esports.series import SeriesSearchInput, SeriesTeamsInput
 from app.vnext.providers.pandascore.client import PandaScoreClient
@@ -190,6 +191,7 @@ def test_series_teams_uses_supported_series_participants_endpoint() -> None:
                 "location": "cn",
                 "slug": "xtreme-gaming",
                 "image_url": "https://example.test/xg.png",
+                "display_ref": None,
             }
         ],
         "page": 2,
@@ -198,3 +200,37 @@ def test_series_teams_uses_supported_series_participants_endpoint() -> None:
     }
     for field in ("players", "modified_at", "dark_mode_image_url", "current_videogame"):
         assert not hasattr(result.items[0], field)
+
+
+@pytest.mark.parametrize("fields", [("begin_at",), ("end_at",), ("begin_at", "end_at")])
+def test_series_date_ranges_map_to_utc_provider_ranges_in_one_request(fields):
+    calls = []
+
+    def handler(request):
+        calls.append((request.url.path, dict(request.url.params)))
+        return httpx.Response(200, json=[], request=request)
+
+    interval = {"start": "2026-09-18T00:00:00+08:00", "end": "2026-10-18T17:50:31+08:00"}
+    query = SeriesSearchInput.model_validate(
+        {
+            **{field: interval for field in fields},
+            "league_id": 4106,
+            "limit": 100,
+        }
+    )
+    result = asyncio.run(_adapter(handler).search(query))
+    assert calls == [
+        (
+            "/dota2/series",
+            {
+                "page": "1",
+                "per_page": "100",
+                "filter[league_id]": "4106",
+                **{
+                    f"range[{field}]": "2026-09-17T16:00:00Z,2026-10-18T09:50:31Z"
+                    for field in fields
+                },
+            },
+        )
+    ]
+    assert result.items == []

@@ -225,15 +225,26 @@ result exposes the frozen `LeagueDTO` identity fields `id`, `name`, `slug`, and
 `image_url`; nested provider navigation such as `series[]` is not included.
 
 `esports.series.search` resolves a specific edition or season of a league. It
-accepts `id`, `league_id`, `name`, `season`, `year`, `winner_id`, `tier`, `page`,
-and `limit`, and returns the frozen `SeriesDTO`: series identity, edition,
-timing, winner, and tier metadata together with `league_id`. It does not expose
+accepts `id`, `league_id`, `name`, `season`, `year`, `begin_at`, `end_at`,
+`winner_id`, `tier`, `page`, and `limit`, and returns the frozen `SeriesDTO`:
+series identity, edition, timing, winner, and tier metadata together with
+`league_id`. It does not expose
 the parent `league{}` object or navigation-only `tournaments[]`; use
 `esports.tournament.search(series_id=...)` to find Tournament stages within a
 known Series. Source Series names can themselves include qualifiers, regions, or
 Play-In stages, so do not infer a strict hierarchy from a name. Use `league_id`
 and `year` for a bounded edition lookup; do not re-query a parent when the
 available context is sufficient.
+
+`begin_at` and `end_at` are optional `{start, end}` timestamp ranges filtering
+the Series start and end respectively. Both endpoints are required, must include
+a timezone, and must satisfy `start <= end`; the adapter converts them to UTC
+and sends `range[begin_at]` / `range[end_at]` in one provider request. For example,
+`begin_at={"start":"2026-09-18T00:00:00+08:00","end":"2026-10-18T00:00:00+08:00"}`
+selects Series starting within that window. Supplying both filters requires both
+to match; it does not mean all Series overlapping the window. Existing filters
+and pagination still apply; returned timestamps may be null and a single page
+does not assert complete window coverage.
 
 `esports.tournament.search` resolves a competition stage within one series. It
 accepts `id`, `series_id`, `name`, `page`, and `limit`, and returns a

@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from .dtos import ResponseAnomaly, SeriesDTO, TeamRefDTO
 
 
 class SeriesModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class SeriesDateRange(SeriesModel):
+    start: AwareDatetime = Field(description="Range start as an ISO 8601 timestamp with timezone.")
+    end: AwareDatetime = Field(description="Range end as an ISO 8601 timestamp with timezone.")
+
+    @model_validator(mode="after")
+    def validate_order(self) -> SeriesDateRange:
+        if self.start > self.end:
+            raise ValueError("Range start must not be later than end")
+        return self
 
 
 class SeriesSearchInput(SeriesModel):
@@ -37,6 +48,20 @@ class SeriesSearchInput(SeriesModel):
         ge=2000,
         le=2100,
         description="Calendar year of the series edition.",
+    )
+    begin_at: SeriesDateRange | None = Field(
+        default=None,
+        description=(
+            "Only return series whose start timestamp is within this range. "
+            "Use for series starting in a time window; not all series active during it."
+        ),
+    )
+    end_at: SeriesDateRange | None = Field(
+        default=None,
+        description=(
+            "Only return series whose end timestamp is within this range. "
+            "If begin_at is also supplied, both ranges must match."
+        ),
     )
     winner_id: int | None = Field(
         default=None,
@@ -95,6 +120,7 @@ class SeriesTeamsResult(SeriesModel):
 
 __all__ = [
     "SeriesModel",
+    "SeriesDateRange",
     "SeriesDTO",
     "SeriesSearchInput",
     "SeriesSearchResult",

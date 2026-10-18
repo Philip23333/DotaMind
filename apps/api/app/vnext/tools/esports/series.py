@@ -21,6 +21,12 @@ Use league_id when a known League provides useful context. Use year and season
 to narrow an edition lookup, but do not assume either value identifies a unique
 Series.
 
+Use begin_at or end_at with {start, end} timestamps to filter series starting
+or ending within a time window. Both endpoints must include a timezone (Z or
+an offset). When both filters are supplied, both must match; this selects series
+whose start and end each fall in their specified ranges, not all series active
+during a window. Date filters combine with the other criteria and pagination.
+
 Use name for fuzzy discovery and id when the exact Series ID is known. If a
 known Series has a Tournament stage that needs to be found, use
 esports.tournament.search with series_id. Do not re-query a parent object when

@@ -323,6 +323,8 @@ league_id?
 name?
 season?
 year?
+begin_at?: {start, end}
+end_at?: {start, end}
 winner_id?
 tier?
 page=1
@@ -359,6 +361,15 @@ page
 limit
 → per_page
 ```
+
+Date ranges are supported: `begin_at` maps to `range[begin_at]=start,end`, and
+`end_at` maps to `range[end_at]=start,end`. Each range requires two timezone-aware
+timestamps in chronological order; the adapter normalizes offsets to UTC.
+The filters combine with AND and retain normal pagination. Two identical ranges
+select Series starting and ending inside the window, not all overlapping Series.
+Direct official endpoint checks on 2026-10-18 returned HTTP 200 for each range
+and their combination. These are timestamp ranges, unlike the single UTC day
+`filter[begin_at]` currently used by Match search.
 
 ## 5.3 Explicitly unsupported model fields
 
