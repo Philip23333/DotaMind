@@ -53,6 +53,7 @@ def test_opt_in_registry_registers_resolution_and_keeps_game_detail() -> None:
         game_resolution_enabled=True,
         pandascore_token="configured-token",
         opendota_enabled=True,
+        stratz_token="configured-token",
     )
     registry_services = VNextServices(
         match_search=match_search,

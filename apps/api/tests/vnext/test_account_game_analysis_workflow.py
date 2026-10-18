@@ -43,14 +43,17 @@ _NOW = datetime(2026, 9, 27, tzinfo=UTC)
 
 
 async def _detail_result(query: GameDetailInput, data: dict) -> GameDetailResult:
+    from tests.vnext.game_detail_fixtures import StratzFixtureProvider
+
     class Provider:
         async def get_game_record(self, match_id):
             return OpenDotaGameRecord(match_id=match_id, retrieved_at=_NOW, data=data)
 
     return await GameDetailService(
-        Provider(),
+        StratzFixtureProvider(data, _NOW),
         load_default_catalog_repository,
         UnitCatalog.load_default(),
+        supplement=Provider(),
     ).get_game_detail(query)
 
 
@@ -108,6 +111,8 @@ def _chat(
     detail_enabled: bool = True,
 ) -> tuple[VNextChatService, _MemoryChatRepository, set[str]]:
     settings = VNextSettings(stratz_token="synthetic", opendota_enabled=detail_enabled)
+    if not detail_enabled:
+        services.game_detail = None
     registry = build_vnext_registry(services, settings=settings)
     tool_names = {tool.name for tool in registry.schemas()}
     runtime = AgentRuntime(
@@ -351,6 +356,7 @@ def test_recent_games_reads_exact_player_and_bilingual_names_without_catalog_cal
         assert {tool.name for tool in request.tools} == {
             "artifact.read",
             "artifact.grep",
+            "artifact.query",
             "math.calculate",
         }
         assert any(
@@ -587,13 +593,20 @@ def test_missing_target_account_and_timeline_are_not_filled_from_similar_player(
             )
         )
 
+    def read_players(request: ModelRequest) -> ModelResponse:
+        result = _tool_content(_tool_results(request)[-1])
+        assert result["externalized"] is True
+        return _tool_turn(ToolCall(id="missing-player-read", name="artifact.read", arguments={
+            "ref": result["artifact_ref"], "mode": "read", "path": "data.players",
+        }))
+
     def report_gap(request: ModelRequest) -> ModelResponse:
-        detail_result = _tool_content(_tool_results(request)[-1])
-        assert detail_result["data"]["players"][0]["identity"]["account_id"] == ACCOUNT_ID + 1
+        players = _tool_content(_tool_results(request)[-1])["value"]
+        assert players[0]["identity"]["account_id"] == ACCOUNT_ID + 1
         assert all(
-            row["identity"]["account_id"] != ACCOUNT_ID for row in detail_result["data"]["players"]
+            row["identity"]["account_id"] != ACCOUNT_ID for row in players
         )
-        assert "purchase_log" not in detail_result["data"]
+        assert all("purchase_log" not in row for row in players)
         instruction = " ".join(
             " ".join(
                 message.content
@@ -612,6 +625,7 @@ def test_missing_target_account_and_timeline_are_not_filled_from_similar_player(
         [
             get_recent,
             get_detail,
+            read_players,
             report_gap,
             lambda _request: ModelResponse.from_final(
                 "I cannot confirm this account's match data or event timeline."

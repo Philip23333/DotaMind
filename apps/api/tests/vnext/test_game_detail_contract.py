@@ -23,7 +23,8 @@ def test_game_detail_input_uses_positive_strict_valve_game_id() -> None:
 
 def test_game_detail_requires_closed_governed_data_and_unique_label_versions() -> None:
     arguments = {
-        "valve_game_id": 12345, "provider": "opendota", "retrieved_at": NOW,
+        "valve_game_id": 12345, "provider": "stratz", "retrieved_at": NOW,
+        "sources": {"stratz": {"retrieved_at": NOW}, "opendota": {"retrieved_at": NOW}},
         "catalog_version": EntityNameResolver(DotaCatalogRepository.load_default()).resolve_many(
             kind="hero", ids=[],
         ).catalog_version,

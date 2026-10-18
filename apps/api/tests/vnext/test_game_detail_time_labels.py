@@ -160,6 +160,8 @@ def test_saved_game_labels_survive_public_dto_roundtrip_without_changing_source(
 
 
 def test_time_labels_reach_the_public_tool_artifact_and_narrow_read() -> None:
+    from tests.vnext.test_stratz_detail_projection import primary
+
     original = record(json.loads(FIXTURE.read_text()))
 
     class Provider:
@@ -167,14 +169,19 @@ def test_time_labels_reach_the_public_tool_artifact_and_narrow_read() -> None:
             assert match_id == original.match_id
             return original
 
+    class Primary:
+        async def get_game_record(self, match_id):
+            return primary(match_id)
+
     service = GameDetailService(
-        Provider(),
+        Primary(),
         DotaCatalogRepository.load_default,
         UnitCatalog.load_default(),
+        supplement=Provider(),
     )
     registry = build_vnext_registry(
         VNextServices(game_detail=service.get_game_detail),
-        settings=VNextSettings(opendota_enabled=True),
+        settings=VNextSettings(stratz_token="fixture-token", opendota_enabled=True),
     )
 
     async def run():

@@ -26,11 +26,25 @@ Returns eight governed sections: match, draft, players, economy, builds,
 events, interactions, and coverage. Hero, item, ability, and event-unit objects
 include confirmed IDs where applicable and English/Chinese names from local
 catalogs; no separate Catalog call is needed just to decode these entities.
-The result records label-resource versions separately from OpenDota provenance.
+The result uses STRATZ as primary with fixed OpenDota supplements inside the tool.
+provider identifies the primary source; sources, coverage.groups and event
+source_paths attribute the actual facts and retrieval times. You do not need
+another Provider lookup to fill these predefined supplemental groups.
+Label-resource versions are separate from match-source provenance.
 data.match.match_date is the Beijing calendar date (Asia/Shanghai), so it may differ
 from a source UTC date. data.match.score contains Radiant/Dire hero-kill counts, not
 series game wins. data.economy.radiant_gold_adv preserves the source gold-advantage
 metric; do not relabel it as a net-worth difference.
+players[].minute_timeline.cumulative_gold_earned is cumulative earned income,
+not wallet balance or remaining net worth; cumulative_experience is cumulative XP.
+Minute net_worth is intentionally excluded. final_stats.earned_gold_net_worth_gap
+requires reliable same-final-time inputs and may be null; it is not pure death loss.
+known_deaths counts only normalized deaths with known times through that sample;
+final_stats.deaths stays the source final total. Check coverage.death_counts for
+unknown-time facts and missing events. Do not treat a partial known count as a total.
+Build purchase_events, inventory_events and ability_upgrade_events are separate
+source observations. Purchases do not prove assembly, delivery or inventory.
+Use explicit objective events: a gold reason named ROSHAN is not a Roshan kill.
 Game-relative time fields include program-generated display labels such as
 time_label and duration_label (MM:SS, preserving negative and fractional seconds).
 Use these labels for display; use the original seconds to match, sort, or calculate.
@@ -60,7 +74,7 @@ def register_game_detail_tool(registry: ToolRegistry, lookup: GameDetailHandler)
             handler=handler,
             read_only=True,
             parallel_safe=True,
-            metadata={"game": "dota2", "domain": "game", "provider": "opendota"},
+            metadata={"game": "dota2", "domain": "game", "provider": "stratz"},
         )
     )
 

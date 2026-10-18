@@ -357,7 +357,7 @@ def test_registry_gate_services_composition_and_no_network_on_build(monkeypatch)
     disabled = build_vnext_registry(settings=VNextSettings())
     assert "game.detail" not in {tool.name for tool in disabled.schemas()}
 
-    settings = VNextSettings(opendota_enabled=True)
+    settings = VNextSettings(opendota_enabled=True, stratz_token="fixture-token")
     services = build_vnext_services(settings)
     enabled = build_vnext_registry(services, settings=settings)
     assert "game.detail" in {tool.name for tool in enabled.schemas()}
@@ -378,16 +378,23 @@ def test_registry_gate_services_composition_and_no_network_on_build(monkeypatch)
 
 
 def test_game_detail_result_spills_to_artifact_and_reads_narrow_player_path() -> None:
+    from tests.vnext.test_stratz_detail_projection import primary
+
     fixture = Path(__file__).parent / "fixtures/game_detail/opendota_9040460429.json"
     source = json.loads(fixture.read_text())
     source["extension"] = "x" * 16000
     valve_id = source["match_id"]
     index = next(i for i, p in enumerate(source["players"]) if p["hero_id"] == 1)
     adapter, _ = _adapter(lambda request: httpx.Response(200, json=source, request=request))
-    settings = VNextSettings(opendota_enabled=True)
+    class Primary:
+        async def get_game_record(self, match_id):
+            return primary(match_id)
+
+    settings = VNextSettings(opendota_enabled=True, stratz_token="fixture-token")
     registry = build_vnext_registry(
         VNextServices(game_detail=GameDetailService(
-            adapter, DotaCatalogRepository.load_default, UnitCatalog.load_default(),
+            Primary(), DotaCatalogRepository.load_default, UnitCatalog.load_default(),
+            supplement=adapter,
         ).get_game_detail),
         settings=settings,
     )
@@ -441,6 +448,10 @@ def test_game_detail_result_spills_to_artifact_and_reads_narrow_player_path() ->
 
 
 def test_recent_games_tool_id_flows_into_game_detail_tool() -> None:
+    from datetime import UTC, datetime
+
+    from tests.vnext.game_detail_fixtures import StratzFixtureProvider
+
     account_id = 123456789
     recent_match = {
         "id": _MATCH_ID,
@@ -511,10 +522,14 @@ def test_recent_games_tool_id_flows_into_game_detail_tool() -> None:
         VNextServices(
             player_recent_games=stratz.get_recent_games,
             game_detail=GameDetailService(
-                opendota, DotaCatalogRepository.load_default, UnitCatalog.load_default(),
+                StratzFixtureProvider({"match_id": _MATCH_ID, "duration": 2700,
+                    "radiant_win": False, "players": [{"account_id": account_id,
+                        "hero_id": 1, "player_slot": 0, "isRadiant": True}]}, datetime.now(UTC)),
+                DotaCatalogRepository.load_default, UnitCatalog.load_default(),
+                supplement=opendota,
             ).get_game_detail,
         ),
-        settings=VNextSettings(opendota_enabled=True),
+        settings=VNextSettings(opendota_enabled=True, stratz_token="fixture-token"),
     )
 
     recent_result = _run(

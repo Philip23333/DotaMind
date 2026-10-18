@@ -16,7 +16,9 @@ from app.vnext.providers.match_resolution import GameResolutionReadPolicy
 from app.vnext.providers.opendota.client import OpenDotaClient as RealOpenDotaClient
 from app.vnext.providers.pandascore.client import PandaScoreClient as RealPandaScoreClient
 from app.vnext.providers.source_reads import source_read_scope
+from app.vnext.providers.stratz.client import StratzGraphQLClient as RealStratzClient
 from tests.vnext.fakes import ScriptedModelClient
+from tests.vnext.game_detail_fixtures import stratz_facts
 
 _FIXTURE_DIR = Path(__file__).parent / "fixtures" / "game_resolution"
 _MATCH_ID = 1_743_565
@@ -66,6 +68,10 @@ def _product_stack(
 
     async def handle(request: httpx.Request) -> httpx.Response:
         requests.append(request)
+        if request.url.host == "stratz.test":
+            assert request.method == "POST"
+            assert json.loads(request.content)["variables"] == {"id": _VALVE_GAME_ID}
+            return httpx.Response(200, json={"data": {"match": stratz_facts(game_detail)}})
         assert request.method == "GET"
         if request.url.host == "pandascore.test":
             assert request.url.path == "/dota2/matches"
@@ -113,10 +119,14 @@ def _product_stack(
 
     monkeypatch.setattr(composition, "PandaScoreClient", make_pandascore_client)
     monkeypatch.setattr(composition, "OpenDotaClient", make_opendota_client)
+    monkeypatch.setattr(composition, "StratzGraphQLClient",
+                        lambda **kwargs: RealStratzClient(**kwargs, transport=transport))
     settings = VNextSettings(
         pandascore_base_url="https://pandascore.test",
         pandascore_token="composition-test-token",
         opendota_enabled=True,
+        stratz_token="composition-test-token",
+        stratz_graphql_url="https://stratz.test/graphql",
         opendota_base_url="https://opendota.test/api",
         game_resolution_enabled=True,
         game_resolution_read_policy=policy or _policy(),
@@ -132,11 +142,11 @@ def _product_stack(
         is resolution_provider._pandascore_match_context.client
     )
     assert (
-        resolution_provider._opendota_game_detail is services.game_detail.__self__._provider
+        resolution_provider._opendota_game_detail is services.game_detail.__self__._supplement
     )
     assert (
         resolution_provider._opendota_discovery.client
-        is services.game_detail.__self__._provider.client
+        is services.game_detail.__self__._supplement.client
     )
     registry = build_vnext_registry(services, settings=settings)
     return settings, services, registry, requests
@@ -169,11 +179,11 @@ async def test_request_reuses_resolution_sources_and_detail_without_changing_evi
         assert second.content["value"]["data"]["requests_started"] == 4
         detail = await registry.execute(_call("game.detail", {"valve_game_id": _VALVE_GAME_ID}))
         assert detail.status == "ok"
-        assert (cache.remote_reads, cache.cache_hits) == (4, 5)
-    assert len(requests) == 5  # One search, four shared resolution reads, no extra detail GET.
+        assert (cache.remote_reads, cache.cache_hits) == (5, 5)
+    assert len(requests) == 6  # Search, four shared resolution reads and STRATZ primary.
     with source_read_scope():
         assert (await registry.execute(query)).status == "ok"
-    assert len(requests) == 9  # A new user request obtains a new source snapshot.
+    assert len(requests) == 10  # A new user request obtains a new resolution source snapshot.
 
 
 @_async_test
@@ -201,7 +211,7 @@ async def test_product_runtime_binds_sources_to_one_request(
             ModelResponse.from_final("done"),
         ])
         await runtime.run([UserMessage(content="resolve the selected game and inspect details")])
-    assert len(requests) == 9  # One search + four source GETs per run, including detail reuse.
+    assert len(requests) == 11  # Search + four source GETs and one STRATZ POST per run.
 
 
 @_async_test
@@ -291,6 +301,7 @@ async def test_product_composition_runs_search_resolve_and_detail_chain(
         ("opendota.test", "/api/leagues"),
         ("opendota.test", f"/api/leagues/{_LEAGUE_ID}/matches"),
         ("opendota.test", f"/api/matches/{_VALVE_GAME_ID}"),
+        ("stratz.test", "/graphql"),
         ("opendota.test", f"/api/matches/{_VALVE_GAME_ID}"),
     ]
     assert [dict(request.url.params).get("per_page") for request in requests[:2]] == [

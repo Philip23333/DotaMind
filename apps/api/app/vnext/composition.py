@@ -107,6 +107,7 @@ from app.vnext.providers.stratz import (
     StratzPlayerProfileAdapter,
     StratzPlayerRecentGamesAdapter,
 )
+from app.vnext.providers.stratz.game_detail import StratzGameDetailAdapter
 from app.vnext.providers.tavily import TavilyWebSearch
 from app.vnext.providers.tavily.web_search import (
     TAVILY_REMOTE_SEARCH_TOOL,
@@ -646,6 +647,7 @@ def build_vnext_services(
         Callable[[PlayerRecentGamesInput], Awaitable[PlayerRecentGamesResult]] | None
     ) = None
     stratz_token = config.stratz_token.strip()
+    stratz_detail_adapter: StratzGameDetailAdapter | None = None
     if stratz_token:
         stratz_client = StratzGraphQLClient(
             graphql_url=config.stratz_graphql_url,
@@ -654,6 +656,7 @@ def build_vnext_services(
         )
         player_profile = StratzPlayerProfileAdapter(stratz_client).get_profile
         player_recent_games = StratzPlayerRecentGamesAdapter(stratz_client).get_recent_games
+        stratz_detail_adapter = StratzGameDetailAdapter(stratz_client)
     repository_provider = (
         catalog_repository_provider
         if catalog_repository_provider is not None
@@ -669,10 +672,12 @@ def build_vnext_services(
             timeout_seconds=config.opendota_timeout_seconds,
         )
         game_detail_adapter = OpenDotaGameDetailAdapter(opendota_client)
+    if stratz_detail_adapter is not None:
         game_detail = GameDetailService(
-            game_detail_adapter,
+            stratz_detail_adapter,
             repository_provider,
             UnitCatalog.load_default(),
+            supplement=game_detail_adapter,
         ).get_game_detail
     game_resolution: GameResolutionService | None = None
     if config.game_resolution_enabled:
@@ -877,7 +882,7 @@ def build_vnext_registry(
         register_player_profile_tool(registry, resolved_services.player_profile)
     if resolved_services.player_recent_games is not None:
         register_player_recent_games_tool(registry, resolved_services.player_recent_games)
-    if config.opendota_enabled and resolved_services.game_detail is not None:
+    if config.stratz_token.strip() and resolved_services.game_detail is not None:
         register_game_detail_tool(registry, resolved_services.game_detail)
     if config.game_resolution_enabled:
         assert resolved_services.game_resolution is not None

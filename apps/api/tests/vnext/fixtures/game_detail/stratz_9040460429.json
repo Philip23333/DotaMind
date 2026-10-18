@@ -628,6 +628,202 @@
               "itemId": 1123
             },
             {
+              "time": -89,
+              "itemId": 188
+            },
+            {
+              "time": -89,
+              "itemId": 16
+            },
+            {
+              "time": -89,
+              "itemId": 237
+            },
+            {
+              "time": -89,
+              "itemId": 42
+            },
+            {
+              "time": -89,
+              "itemId": 43
+            },
+            {
+              "time": -89,
+              "itemId": 43
+            },
+            {
+              "time": -89,
+              "itemId": 43
+            },
+            {
+              "time": -89,
+              "itemId": 42
+            },
+            {
+              "time": 83,
+              "itemId": 42
+            },
+            {
+              "time": 84,
+              "itemId": 43
+            },
+            {
+              "time": 207,
+              "itemId": 43
+            },
+            {
+              "time": 251,
+              "itemId": 39
+            },
+            {
+              "time": 542,
+              "itemId": 43
+            },
+            {
+              "time": 542,
+              "itemId": 1123
+            },
+            {
+              "time": 568,
+              "itemId": 38
+            },
+            {
+              "time": 578,
+              "itemId": 36
+            },
+            {
+              "time": 709,
+              "itemId": 43
+            },
+            {
+              "time": 709,
+              "itemId": 43
+            },
+            {
+              "time": 710,
+              "itemId": 1123
+            },
+            {
+              "time": 747,
+              "itemId": 11
+            },
+            {
+              "time": 747,
+              "itemId": 42
+            },
+            {
+              "time": 823,
+              "itemId": 46
+            },
+            {
+              "time": 823,
+              "itemId": 38
+            },
+            {
+              "time": 867,
+              "itemId": 43
+            },
+            {
+              "time": 868,
+              "itemId": 42
+            },
+            {
+              "time": 868,
+              "itemId": 43
+            },
+            {
+              "time": 922,
+              "itemId": 43
+            },
+            {
+              "time": 957,
+              "itemId": 43
+            },
+            {
+              "time": 996,
+              "itemId": 43
+            },
+            {
+              "time": 1085,
+              "itemId": 43
+            },
+            {
+              "time": 1182,
+              "itemId": 43
+            },
+            {
+              "time": 1351,
+              "itemId": 1
+            },
+            {
+              "time": 1409,
+              "itemId": 42
+            },
+            {
+              "time": 1409,
+              "itemId": 43
+            },
+            {
+              "time": 1562,
+              "itemId": 42
+            },
+            {
+              "time": 1562,
+              "itemId": 43
+            },
+            {
+              "time": 1684,
+              "itemId": 46
+            },
+            {
+              "time": 1757,
+              "itemId": 43
+            },
+            {
+              "time": 1759,
+              "itemId": 188
+            },
+            {
+              "time": 2007,
+              "itemId": 43
+            },
+            {
+              "time": 2040,
+              "itemId": 188
+            },
+            {
+              "time": 2326,
+              "itemId": 26
+            },
+            {
+              "time": 2328,
+              "itemId": 30
+            },
+            {
+              "time": 2443,
+              "itemId": 43
+            },
+            {
+              "time": 2443,
+              "itemId": 188
+            },
+            {
+              "time": 2772,
+              "itemId": 4205
+            },
+            {
+              "time": 2864,
+              "itemId": 23
+            },
+            {
+              "time": 2864,
+              "itemId": 593
+            },
+            {
+              "time": 2864,
+              "itemId": 101
+            },
+            {
               "time": 2864,
               "itemId": 102
             }
@@ -939,6 +1135,90 @@
               "itemId": 14
             },
             {
+              "time": -89,
+              "itemId": 20
+            },
+            {
+              "time": -89,
+              "itemId": 16
+            },
+            {
+              "time": -89,
+              "itemId": 237
+            },
+            {
+              "time": 12,
+              "itemId": 44
+            },
+            {
+              "time": 388,
+              "itemId": 63
+            },
+            {
+              "time": 685,
+              "itemId": 46
+            },
+            {
+              "time": 833,
+              "itemId": 69
+            },
+            {
+              "time": 1003,
+              "itemId": 145
+            },
+            {
+              "time": 1035,
+              "itemId": 74
+            },
+            {
+              "time": 1082,
+              "itemId": 75
+            },
+            {
+              "time": 1274,
+              "itemId": 46
+            },
+            {
+              "time": 1336,
+              "itemId": 170
+            },
+            {
+              "time": 1371,
+              "itemId": 46
+            },
+            {
+              "time": 1478,
+              "itemId": 147
+            },
+            {
+              "time": 1703,
+              "itemId": 46
+            },
+            {
+              "time": 1801,
+              "itemId": 139
+            },
+            {
+              "time": 1802,
+              "itemId": 46
+            },
+            {
+              "time": 1943,
+              "itemId": 46
+            },
+            {
+              "time": 2039,
+              "itemId": 143
+            },
+            {
+              "time": 2627,
+              "itemId": 116
+            },
+            {
+              "time": 2741,
+              "itemId": 162
+            },
+            {
               "time": 2788,
               "itemId": 208
             }
@@ -1212,6 +1492,86 @@
             {
               "time": -89,
               "itemId": 44
+            },
+            {
+              "time": 167,
+              "itemId": 34
+            },
+            {
+              "time": 167,
+              "itemId": 35
+            },
+            {
+              "time": 193,
+              "itemId": 36
+            },
+            {
+              "time": 354,
+              "itemId": 4
+            },
+            {
+              "time": 355,
+              "itemId": 46
+            },
+            {
+              "time": 391,
+              "itemId": 2
+            },
+            {
+              "time": 392,
+              "itemId": 38
+            },
+            {
+              "time": 420,
+              "itemId": 50
+            },
+            {
+              "time": 665,
+              "itemId": 1
+            },
+            {
+              "time": 724,
+              "itemId": 244
+            },
+            {
+              "time": 727,
+              "itemId": 11
+            },
+            {
+              "time": 1033,
+              "itemId": 46
+            },
+            {
+              "time": 1210,
+              "itemId": 4205
+            },
+            {
+              "time": 1235,
+              "itemId": 108
+            },
+            {
+              "time": 1573,
+              "itemId": 37
+            },
+            {
+              "time": 1692,
+              "itemId": 38
+            },
+            {
+              "time": 2098,
+              "itemId": 119
+            },
+            {
+              "time": 2436,
+              "itemId": 38
+            },
+            {
+              "time": 2462,
+              "itemId": 116
+            },
+            {
+              "time": 2543,
+              "itemId": 38
             },
             {
               "time": 2718,
@@ -1504,6 +1864,210 @@
             {
               "time": -89,
               "itemId": 44
+            },
+            {
+              "time": -89,
+              "itemId": 237
+            },
+            {
+              "time": -89,
+              "itemId": 16
+            },
+            {
+              "time": -89,
+              "itemId": 1123
+            },
+            {
+              "time": -89,
+              "itemId": 43
+            },
+            {
+              "time": -89,
+              "itemId": 11
+            },
+            {
+              "time": -89,
+              "itemId": 42
+            },
+            {
+              "time": 183,
+              "itemId": 42
+            },
+            {
+              "time": 215,
+              "itemId": 46
+            },
+            {
+              "time": 358,
+              "itemId": 43
+            },
+            {
+              "time": 358,
+              "itemId": 1123
+            },
+            {
+              "time": 460,
+              "itemId": 42
+            },
+            {
+              "time": 579,
+              "itemId": 16
+            },
+            {
+              "time": 579,
+              "itemId": 35
+            },
+            {
+              "time": 628,
+              "itemId": 36
+            },
+            {
+              "time": 668,
+              "itemId": 188
+            },
+            {
+              "time": 668,
+              "itemId": 42
+            },
+            {
+              "time": 669,
+              "itemId": 38
+            },
+            {
+              "time": 672,
+              "itemId": 46
+            },
+            {
+              "time": 770,
+              "itemId": 92
+            },
+            {
+              "time": 795,
+              "itemId": 46
+            },
+            {
+              "time": 802,
+              "itemId": 188
+            },
+            {
+              "time": 1030,
+              "itemId": 42
+            },
+            {
+              "time": 1122,
+              "itemId": 43
+            },
+            {
+              "time": 1150,
+              "itemId": 1852
+            },
+            {
+              "time": 1165,
+              "itemId": 42
+            },
+            {
+              "time": 1267,
+              "itemId": 43
+            },
+            {
+              "time": 1267,
+              "itemId": 42
+            },
+            {
+              "time": 1267,
+              "itemId": 38
+            },
+            {
+              "time": 1336,
+              "itemId": 46
+            },
+            {
+              "time": 1472,
+              "itemId": 46
+            },
+            {
+              "time": 1582,
+              "itemId": 1
+            },
+            {
+              "time": 1668,
+              "itemId": 42
+            },
+            {
+              "time": 1668,
+              "itemId": 43
+            },
+            {
+              "time": 1669,
+              "itemId": 43
+            },
+            {
+              "time": 1669,
+              "itemId": 43
+            },
+            {
+              "time": 1800,
+              "itemId": 43
+            },
+            {
+              "time": 1800,
+              "itemId": 42
+            },
+            {
+              "time": 1915,
+              "itemId": 43
+            },
+            {
+              "time": 1937,
+              "itemId": 42
+            },
+            {
+              "time": 1938,
+              "itemId": 43
+            },
+            {
+              "time": 2083,
+              "itemId": 43
+            },
+            {
+              "time": 2213,
+              "itemId": 43
+            },
+            {
+              "time": 2214,
+              "itemId": 609
+            },
+            {
+              "time": 2253,
+              "itemId": 43
+            },
+            {
+              "time": 2383,
+              "itemId": 4206
+            },
+            {
+              "time": 2423,
+              "itemId": 43
+            },
+            {
+              "time": 2507,
+              "itemId": 42
+            },
+            {
+              "time": 2508,
+              "itemId": 43
+            },
+            {
+              "time": 2643,
+              "itemId": 42
+            },
+            {
+              "time": 2644,
+              "itemId": 43
+            },
+            {
+              "time": 2797,
+              "itemId": 42
             },
             {
               "time": 2797,
@@ -1861,6 +2425,90 @@
               "itemId": 15
             },
             {
+              "time": -89,
+              "itemId": 20
+            },
+            {
+              "time": -89,
+              "itemId": 16
+            },
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": 7,
+              "itemId": 77
+            },
+            {
+              "time": 367,
+              "itemId": 46
+            },
+            {
+              "time": 521,
+              "itemId": 164
+            },
+            {
+              "time": 579,
+              "itemId": 178
+            },
+            {
+              "time": 688,
+              "itemId": 36
+            },
+            {
+              "time": 823,
+              "itemId": 46
+            },
+            {
+              "time": 1031,
+              "itemId": 119
+            },
+            {
+              "time": 1094,
+              "itemId": 46
+            },
+            {
+              "time": 1188,
+              "itemId": 1
+            },
+            {
+              "time": 1494,
+              "itemId": 46
+            },
+            {
+              "time": 1688,
+              "itemId": 46
+            },
+            {
+              "time": 1699,
+              "itemId": 116
+            },
+            {
+              "time": 1899,
+              "itemId": 46
+            },
+            {
+              "time": 1937,
+              "itemId": 46
+            },
+            {
+              "time": 1938,
+              "itemId": 38
+            },
+            {
+              "time": 2076,
+              "itemId": 129
+            },
+            {
+              "time": 2076,
+              "itemId": 1856
+            },
+            {
+              "time": 2333,
+              "itemId": 110
+            },
+            {
               "time": 2762,
               "itemId": 96
             }
@@ -2081,6 +2729,138 @@
               "itemId": 16
             },
             {
+              "time": -89,
+              "itemId": 237
+            },
+            {
+              "time": -89,
+              "itemId": 44
+            },
+            {
+              "time": 280,
+              "itemId": 63
+            },
+            {
+              "time": 449,
+              "itemId": 38
+            },
+            {
+              "time": 600,
+              "itemId": 166
+            },
+            {
+              "time": 724,
+              "itemId": 46
+            },
+            {
+              "time": 853,
+              "itemId": 158
+            },
+            {
+              "time": 855,
+              "itemId": 34
+            },
+            {
+              "time": 855,
+              "itemId": 35
+            },
+            {
+              "time": 888,
+              "itemId": 36
+            },
+            {
+              "time": 1008,
+              "itemId": 236
+            },
+            {
+              "time": 1094,
+              "itemId": 46
+            },
+            {
+              "time": 1301,
+              "itemId": 116
+            },
+            {
+              "time": 1386,
+              "itemId": 149
+            },
+            {
+              "time": 1587,
+              "itemId": 141
+            },
+            {
+              "time": 1881,
+              "itemId": 51
+            },
+            {
+              "time": 1881,
+              "itemId": 485
+            },
+            {
+              "time": 1881,
+              "itemId": 7
+            },
+            {
+              "time": 1881,
+              "itemId": 134
+            },
+            {
+              "time": 1895,
+              "itemId": 4205
+            },
+            {
+              "time": 1910,
+              "itemId": 135
+            },
+            {
+              "time": 1931,
+              "itemId": 46
+            },
+            {
+              "time": 1933,
+              "itemId": 38
+            },
+            {
+              "time": 1976,
+              "itemId": 23
+            },
+            {
+              "time": 1976,
+              "itemId": 593
+            },
+            {
+              "time": 1976,
+              "itemId": 101
+            },
+            {
+              "time": 1976,
+              "itemId": 262
+            },
+            {
+              "time": 1976,
+              "itemId": 102
+            },
+            {
+              "time": 1988,
+              "itemId": 46
+            },
+            {
+              "time": 1999,
+              "itemId": 263
+            },
+            {
+              "time": 2199,
+              "itemId": 156
+            },
+            {
+              "time": 2578,
+              "itemId": 108
+            },
+            {
+              "time": 2578,
+              "itemId": 271
+            },
+            {
               "time": 2746,
               "itemId": 247
             }
@@ -2268,6 +3048,102 @@
             {
               "time": -89,
               "itemId": 44
+            },
+            {
+              "time": -89,
+              "itemId": 42
+            },
+            {
+              "time": 217,
+              "itemId": 38
+            },
+            {
+              "time": 219,
+              "itemId": 42
+            },
+            {
+              "time": 244,
+              "itemId": 36
+            },
+            {
+              "time": 400,
+              "itemId": 38
+            },
+            {
+              "time": 539,
+              "itemId": 46
+            },
+            {
+              "time": 676,
+              "itemId": 174
+            },
+            {
+              "time": 748,
+              "itemId": 63
+            },
+            {
+              "time": 898,
+              "itemId": 38
+            },
+            {
+              "time": 948,
+              "itemId": 46
+            },
+            {
+              "time": 1096,
+              "itemId": 46
+            },
+            {
+              "time": 1100,
+              "itemId": 38
+            },
+            {
+              "time": 1279,
+              "itemId": 108
+            },
+            {
+              "time": 1288,
+              "itemId": 38
+            },
+            {
+              "time": 1468,
+              "itemId": 1
+            },
+            {
+              "time": 1505,
+              "itemId": 38
+            },
+            {
+              "time": 1649,
+              "itemId": 46
+            },
+            {
+              "time": 1997,
+              "itemId": 225
+            },
+            {
+              "time": 2296,
+              "itemId": 129
+            },
+            {
+              "time": 2344,
+              "itemId": 235
+            },
+            {
+              "time": 2346,
+              "itemId": 46
+            },
+            {
+              "time": 2415,
+              "itemId": 46
+            },
+            {
+              "time": 2558,
+              "itemId": 143
+            },
+            {
+              "time": 2650,
+              "itemId": 4206
             },
             {
               "time": 2897,
@@ -2469,6 +3345,82 @@
             {
               "time": -89,
               "itemId": 20
+            },
+            {
+              "time": -89,
+              "itemId": 16
+            },
+            {
+              "time": 185,
+              "itemId": 75
+            },
+            {
+              "time": 328,
+              "itemId": 63
+            },
+            {
+              "time": 414,
+              "itemId": 36
+            },
+            {
+              "time": 550,
+              "itemId": 40
+            },
+            {
+              "time": 764,
+              "itemId": 174
+            },
+            {
+              "time": 882,
+              "itemId": 38
+            },
+            {
+              "time": 979,
+              "itemId": 40
+            },
+            {
+              "time": 1163,
+              "itemId": 252
+            },
+            {
+              "time": 1559,
+              "itemId": 116
+            },
+            {
+              "time": 1779,
+              "itemId": 46
+            },
+            {
+              "time": 1906,
+              "itemId": 225
+            },
+            {
+              "time": 2097,
+              "itemId": 40
+            },
+            {
+              "time": 2142,
+              "itemId": 1097
+            },
+            {
+              "time": 2245,
+              "itemId": 46
+            },
+            {
+              "time": 2290,
+              "itemId": 939
+            },
+            {
+              "time": 2333,
+              "itemId": 46
+            },
+            {
+              "time": 2418,
+              "itemId": 4206
+            },
+            {
+              "time": 2641,
+              "itemId": 609
             },
             {
               "time": 2806,
@@ -2733,6 +3685,226 @@
             {
               "time": -89,
               "itemId": 1123
+            },
+            {
+              "time": -89,
+              "itemId": 188
+            },
+            {
+              "time": -89,
+              "itemId": 43
+            },
+            {
+              "time": -89,
+              "itemId": 43
+            },
+            {
+              "time": -89,
+              "itemId": 16
+            },
+            {
+              "time": 181,
+              "itemId": 42
+            },
+            {
+              "time": 223,
+              "itemId": 36
+            },
+            {
+              "time": 413,
+              "itemId": 40
+            },
+            {
+              "time": 428,
+              "itemId": 43
+            },
+            {
+              "time": 489,
+              "itemId": 42
+            },
+            {
+              "time": 490,
+              "itemId": 1123
+            },
+            {
+              "time": 491,
+              "itemId": 28
+            },
+            {
+              "time": 555,
+              "itemId": 40
+            },
+            {
+              "time": 668,
+              "itemId": 43
+            },
+            {
+              "time": 796,
+              "itemId": 42
+            },
+            {
+              "time": 797,
+              "itemId": 43
+            },
+            {
+              "time": 797,
+              "itemId": 38
+            },
+            {
+              "time": 797,
+              "itemId": 40
+            },
+            {
+              "time": 907,
+              "itemId": 43
+            },
+            {
+              "time": 908,
+              "itemId": 43
+            },
+            {
+              "time": 908,
+              "itemId": 42
+            },
+            {
+              "time": 1094,
+              "itemId": 42
+            },
+            {
+              "time": 1094,
+              "itemId": 43
+            },
+            {
+              "time": 1095,
+              "itemId": 40
+            },
+            {
+              "time": 1128,
+              "itemId": 269
+            },
+            {
+              "time": 1171,
+              "itemId": 43
+            },
+            {
+              "time": 1203,
+              "itemId": 88
+            },
+            {
+              "time": 1203,
+              "itemId": 180
+            },
+            {
+              "time": 1226,
+              "itemId": 43
+            },
+            {
+              "time": 1332,
+              "itemId": 46
+            },
+            {
+              "time": 1398,
+              "itemId": 42
+            },
+            {
+              "time": 1398,
+              "itemId": 43
+            },
+            {
+              "time": 1663,
+              "itemId": 1
+            },
+            {
+              "time": 1669,
+              "itemId": 43
+            },
+            {
+              "time": 1669,
+              "itemId": 42
+            },
+            {
+              "time": 1804,
+              "itemId": 42
+            },
+            {
+              "time": 1804,
+              "itemId": 43
+            },
+            {
+              "time": 2079,
+              "itemId": 42
+            },
+            {
+              "time": 2080,
+              "itemId": 43
+            },
+            {
+              "time": 2106,
+              "itemId": 256
+            },
+            {
+              "time": 2151,
+              "itemId": 43
+            },
+            {
+              "time": 2152,
+              "itemId": 40
+            },
+            {
+              "time": 2211,
+              "itemId": 42
+            },
+            {
+              "time": 2430,
+              "itemId": 43
+            },
+            {
+              "time": 2435,
+              "itemId": 188
+            },
+            {
+              "time": 2508,
+              "itemId": 42
+            },
+            {
+              "time": 2509,
+              "itemId": 43
+            },
+            {
+              "time": 2610,
+              "itemId": 42
+            },
+            {
+              "time": 2611,
+              "itemId": 43
+            },
+            {
+              "time": 2726,
+              "itemId": 43
+            },
+            {
+              "time": 2877,
+              "itemId": 27
+            },
+            {
+              "time": 2877,
+              "itemId": 93
+            },
+            {
+              "time": 2877,
+              "itemId": 4
+            },
+            {
+              "time": 2877,
+              "itemId": 78
+            },
+            {
+              "time": 2877,
+              "itemId": 230
+            },
+            {
+              "time": 2877,
+              "itemId": 94
             },
             {
               "time": 2877,
@@ -3002,6 +4174,202 @@
               "itemId": 27
             },
             {
+              "time": -89,
+              "itemId": 16
+            },
+            {
+              "time": -89,
+              "itemId": 1123
+            },
+            {
+              "time": -89,
+              "itemId": 237
+            },
+            {
+              "time": -89,
+              "itemId": 43
+            },
+            {
+              "time": -89,
+              "itemId": 42
+            },
+            {
+              "time": 184,
+              "itemId": 44
+            },
+            {
+              "time": 184,
+              "itemId": 1123
+            },
+            {
+              "time": 437,
+              "itemId": 43
+            },
+            {
+              "time": 438,
+              "itemId": 43
+            },
+            {
+              "time": 438,
+              "itemId": 1123
+            },
+            {
+              "time": 515,
+              "itemId": 244
+            },
+            {
+              "time": 556,
+              "itemId": 214
+            },
+            {
+              "time": 587,
+              "itemId": 43
+            },
+            {
+              "time": 587,
+              "itemId": 34
+            },
+            {
+              "time": 587,
+              "itemId": 35
+            },
+            {
+              "time": 588,
+              "itemId": 38
+            },
+            {
+              "time": 628,
+              "itemId": 36
+            },
+            {
+              "time": 639,
+              "itemId": 46
+            },
+            {
+              "time": 639,
+              "itemId": 42
+            },
+            {
+              "time": 748,
+              "itemId": 43
+            },
+            {
+              "time": 748,
+              "itemId": 43
+            },
+            {
+              "time": 884,
+              "itemId": 43
+            },
+            {
+              "time": 951,
+              "itemId": 43
+            },
+            {
+              "time": 973,
+              "itemId": 92
+            },
+            {
+              "time": 1142,
+              "itemId": 1852
+            },
+            {
+              "time": 1266,
+              "itemId": 42
+            },
+            {
+              "time": 1266,
+              "itemId": 43
+            },
+            {
+              "time": 1389,
+              "itemId": 43
+            },
+            {
+              "time": 1502,
+              "itemId": 43
+            },
+            {
+              "time": 1502,
+              "itemId": 188
+            },
+            {
+              "time": 1590,
+              "itemId": 46
+            },
+            {
+              "time": 1591,
+              "itemId": 43
+            },
+            {
+              "time": 1591,
+              "itemId": 43
+            },
+            {
+              "time": 1591,
+              "itemId": 42
+            },
+            {
+              "time": 1699,
+              "itemId": 1
+            },
+            {
+              "time": 1738,
+              "itemId": 43
+            },
+            {
+              "time": 1738,
+              "itemId": 188
+            },
+            {
+              "time": 1976,
+              "itemId": 43
+            },
+            {
+              "time": 1976,
+              "itemId": 43
+            },
+            {
+              "time": 1976,
+              "itemId": 42
+            },
+            {
+              "time": 2181,
+              "itemId": 43
+            },
+            {
+              "time": 2181,
+              "itemId": 188
+            },
+            {
+              "time": 2222,
+              "itemId": 43
+            },
+            {
+              "time": 2248,
+              "itemId": 100
+            },
+            {
+              "time": 2321,
+              "itemId": 43
+            },
+            {
+              "time": 2357,
+              "itemId": 42
+            },
+            {
+              "time": 2500,
+              "itemId": 43
+            },
+            {
+              "time": 2564,
+              "itemId": 1854
+            },
+            {
+              "time": 2713,
+              "itemId": 43
+            },
+            {
               "time": 2767,
               "itemId": 42
             }
@@ -3265,6 +4633,6 @@
         }
       }
     ],
-    "fixture_scope": "Live selected source facts; DEATH gold only; inventory/purchase/upgrade samples truncated. Not a complete event history."
+    "fixture_scope": "Live selected source facts; DEATH gold only; inventory and upgrade samples truncated. Purchases retain queried source list."
   }
 }
