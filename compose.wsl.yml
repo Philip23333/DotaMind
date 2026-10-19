@@ -41,6 +41,7 @@ services:
       DOTAMIND_DATABASE_URL: postgresql://dotamind:${DOTAMIND_POSTGRES_PASSWORD:-dotamind}@postgres:5432/dotamind
       DOTAMIND_REDIS_URL: redis://redis:6379/0
       DOTAMIND_SESSION_STORE_BACKEND: redis
+      DOTAMIND_HEATMAP_DIR: ${DOTAMIND_HEATMAP_DIR:-/var/lib/dotamind/heatmaps}
       DOTAMIND_CORS_ORIGINS: '["http://localhost:${DOTAMIND_WEB_PORT:-3000}","http://127.0.0.1:${DOTAMIND_WEB_PORT:-3000}"]'
       HTTP_PROXY: http://172.29.112.1:10808
       HTTPS_PROXY: http://172.29.112.1:10808
@@ -50,6 +51,8 @@ services:
       no_proxy: localhost,127.0.0.1,::1,postgres,redis,api,chat,nginx
     ports:
       - "127.0.0.1:${DOTAMIND_API_PORT:-8001}:8001"
+    volumes:
+      - heatmap-images:${DOTAMIND_HEATMAP_DIR:-/var/lib/dotamind/heatmaps}
     depends_on:
       postgres:
         condition: service_healthy
@@ -121,3 +124,4 @@ volumes:
   postgres-data:
   redis-data:
   shared-data:
+  heatmap-images:

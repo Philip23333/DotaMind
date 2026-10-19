@@ -53,9 +53,12 @@ services:
       DOTAMIND_DATABASE_URL: postgresql://dotamind:${DOTAMIND_POSTGRES_PASSWORD:-dotamind}@postgres:5432/dotamind
       DOTAMIND_REDIS_URL: redis://redis:6379/0
       DOTAMIND_SESSION_STORE_BACKEND: redis
+      DOTAMIND_HEATMAP_DIR: ${DOTAMIND_HEATMAP_DIR:-/var/lib/dotamind/heatmaps}
       HTTP_PROXY: http://vless-proxy:7890
       HTTPS_PROXY: http://vless-proxy:7890
       NO_PROXY: localhost,127.0.0.1,::1,postgres,redis,vless-proxy
+    volumes:
+      - heatmap-images:${DOTAMIND_HEATMAP_DIR:-/var/lib/dotamind/heatmaps}
     depends_on:
       postgres:
         condition: service_healthy
@@ -107,3 +110,4 @@ volumes:
   postgres-data:
   redis-data:
   shared-data:
+  heatmap-images:

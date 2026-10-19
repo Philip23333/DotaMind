@@ -19,6 +19,7 @@ dependencies = [
   "SQLAlchemy>=2.0.0",
   "python-dotenv>=1.0.1",
   "python-jsonpath==2.2.1",
+  "Pillow>=11,<13",
   "uvicorn[standard]>=0.30.0",
   "redis>=5.0",
 ]

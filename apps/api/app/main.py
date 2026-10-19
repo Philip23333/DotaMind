@@ -14,6 +14,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from app.api.v1.chat_routes import router as chat_router
 from app.api.v1.chat_run_routes import router as chat_run_router
 from app.api.v1.entity_display_routes import router as entity_display_router
+from app.api.v1.game_heatmap_routes import router as game_heatmap_router
 from app.api.v1.home_routes import router as home_router
 from app.api.v1.persistent_image_routes import router as persistent_image_router
 from app.api.v1.routes import router as v1_router
@@ -116,9 +117,7 @@ async def lifespan(app: FastAPI):
     try:
         catalog_repository_provider: Callable[[], DotaCatalogRepository] | None = None
         if vnext_settings.data_dir is not None:
-            catalog_loader = CatalogSnapshotLoader(
-                CatalogSnapshotStore(vnext_settings.data_dir)
-            )
+            catalog_loader = CatalogSnapshotLoader(CatalogSnapshotStore(vnext_settings.data_dir))
             cleanup.push_async_callback(catalog_loader.stop)
             await catalog_loader.start()
             catalog_repository_provider = _repository_provider_for_loader(catalog_loader)
@@ -301,6 +300,7 @@ app.include_router(vnext_chat_router, prefix=settings.api_v1_prefix)
 app.include_router(vnext_trace_router, prefix=settings.api_v1_prefix)
 app.include_router(chat_run_router, prefix=settings.api_v1_prefix)
 app.include_router(persistent_image_router, prefix=settings.api_v1_prefix)
+app.include_router(game_heatmap_router, prefix=settings.api_v1_prefix)
 app.mount(
     f"{settings.api_v1_prefix}/assets/dota",
     StaticFiles(directory=CATALOG_IMAGE_DIR, check_dir=False),

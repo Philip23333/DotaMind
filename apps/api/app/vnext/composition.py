@@ -62,6 +62,8 @@ from app.vnext.capabilities.esports.series import (
 from app.vnext.capabilities.esports.team import TeamSearchInput, TeamSearchResult
 from app.vnext.capabilities.esports.tournament import TournamentSearchInput, TournamentSearchResult
 from app.vnext.capabilities.game.detail import GameDetailInput, GameDetailResult
+from app.vnext.capabilities.game.heatmap_models import HeatmapSettings
+from app.vnext.capabilities.game.heatmaps import GameHeatmapService
 from app.vnext.capabilities.game.service import GameDetailService
 from app.vnext.capabilities.hero.display_enrichment import (
     enrich_hero_guide_display_refs,
@@ -108,6 +110,7 @@ from app.vnext.providers.stratz import (
     StratzPlayerRecentGamesAdapter,
 )
 from app.vnext.providers.stratz.game_detail import StratzGameDetailAdapter
+from app.vnext.providers.stratz.heatmaps import StratzHeatmapAdapter
 from app.vnext.providers.tavily import TavilyWebSearch
 from app.vnext.providers.tavily.web_search import (
     TAVILY_REMOTE_SEARCH_TOOL,
@@ -128,6 +131,7 @@ from app.vnext.tools.esports import (
 )
 from app.vnext.tools.esports.game_resolution import register_game_resolution_tool
 from app.vnext.tools.game.detail import register_game_detail_tool
+from app.vnext.tools.game.heatmaps import register_game_heatmaps_tool
 from app.vnext.tools.hero.guide import register_hero_guide_tool
 from app.vnext.tools.json_schema import compile_object_json_schema
 from app.vnext.tools.player.profile import register_player_profile_tool
@@ -205,6 +209,12 @@ class VNextSettings:
     trace_ttl_seconds: int = 72 * 60 * 60
     test_recording_enabled: bool = False
     data_dir: Path | None = None
+    heatmap_settings: HeatmapSettings = field(
+        default_factory=lambda: HeatmapSettings(
+            directory=Path("/tmp/dotamind-heatmaps"),
+            map_manifest=Path(__file__).resolve().parents[1] / "data/maps/heatmaps.json",
+        )
+    )
     agent_limits: AgentLimits = field(default_factory=AgentLimits)
     artifact_limits: ArtifactLimits = field(default_factory=ArtifactLimits)
     session_context_limits: SessionContextLimits = field(default_factory=SessionContextLimits)
@@ -318,6 +328,34 @@ class VNextSettings:
                 file_values,
             ),
             data_dir=_parse_data_dir(_env_value("DOTAMIND_DATA_DIR", None, file_values)),
+            heatmap_settings=HeatmapSettings(
+                directory=Path(
+                    _env_value(
+                        "DOTAMIND_HEATMAP_DIR",
+                        str(defaults.heatmap_settings.directory),
+                        file_values,
+                    )
+                ),
+                map_manifest=Path(
+                    _env_value(
+                        "DOTAMIND_HEATMAP_MAP_MANIFEST",
+                        str(defaults.heatmap_settings.map_manifest),
+                        file_values,
+                    )
+                ),
+                **{
+                    key: int(
+                        _env_value(name, str(getattr(defaults.heatmap_settings, key)), file_values)
+                    )
+                    for key, name in {
+                        "retention_seconds": "DOTAMIND_HEATMAP_RETENTION_SECONDS",
+                        "max_bytes": "DOTAMIND_HEATMAP_MAX_BYTES",
+                        "max_jobs": "DOTAMIND_HEATMAP_MAX_JOBS",
+                        "max_points": "DOTAMIND_HEATMAP_MAX_POINTS",
+                        "max_duration_seconds": "DOTAMIND_HEATMAP_MAX_DURATION_SECONDS",
+                    }.items()
+                },
+            ),
             agent_limits=_agent_limits_from_env(file_values),
             artifact_limits=_artifact_limits_from_env(file_values),
             session_context_limits=_session_context_limits_from_env(file_values),
@@ -602,6 +640,7 @@ class VNextServices:
         Callable[[PlayerRecentGamesInput], Awaitable[PlayerRecentGamesResult]] | None
     ) = None
     game_detail: GameDetailLookup | None = None
+    game_heatmaps: GameHeatmapService | None = None
     game_resolution: GameResolutionService | None = None
     hero_guide: HeroGuideLookup | None = None
     homepage_recent_series: HomepageRecentSeriesService | None = None
@@ -610,6 +649,8 @@ class VNextServices:
     entity_display_directory: EntityDisplayDirectory | None = None
 
     async def aclose(self) -> None:
+        if self.game_heatmaps is not None:
+            await self.game_heatmaps.aclose()
         if self.homepage_recent_series is not None:
             await self.homepage_recent_series.aclose()
 
@@ -680,6 +721,15 @@ def build_vnext_services(
             UnitCatalog.load_default(),
             supplement=game_detail_adapter,
         ).get_game_detail
+    game_heatmaps = (
+        GameHeatmapService(
+            StratzHeatmapAdapter(stratz_client),
+            config.heatmap_settings,
+            repository_provider,
+        )
+        if stratz_detail_adapter is not None
+        else None
+    )
     game_resolution: GameResolutionService | None = None
     if config.game_resolution_enabled:
         if opendota_client is None or game_detail_adapter is None:
@@ -715,6 +765,7 @@ def build_vnext_services(
         player_profile=player_profile,
         player_recent_games=player_recent_games,
         game_detail=game_detail,
+        game_heatmaps=game_heatmaps,
         game_resolution=game_resolution,
         hero_guide=hero_guide,
         homepage_recent_series=homepage_recent_series,
@@ -886,6 +937,8 @@ def build_vnext_registry(
         register_player_recent_games_tool(registry, resolved_services.player_recent_games)
     if config.stratz_token.strip() and resolved_services.game_detail is not None:
         register_game_detail_tool(registry, resolved_services.game_detail)
+    if config.stratz_token.strip() and resolved_services.game_heatmaps is not None:
+        register_game_heatmaps_tool(registry, resolved_services.game_heatmaps)
     if config.game_resolution_enabled:
         assert resolved_services.game_resolution is not None
         continuation = GameResolutionContinuation(

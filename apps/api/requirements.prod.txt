@@ -130,6 +130,8 @@ packaging==26.2
     # via
     #   langchain-core
     #   langsmith
+pillow==12.3.0
+    # via dotamind-api
 prometheus-client==0.26.0
     # via dotamind-api
 pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
