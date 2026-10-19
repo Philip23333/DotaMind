@@ -941,10 +941,10 @@ mean the target projections have been enabled or universally validated.
 Do not treat these checks as universal coverage, frontend acceptance, or support
 for ratings, inferred roles or causal explanations.
 
-### Accepted default report and heatmap acceptance (pending implementation)
+### Default report and heatmap acceptance (implemented pipeline; production map pending)
 
-The [report contract](agent/game_detail_report.md) is the target, not a completed
-feature. The [source reference](reference/stratz-game-detail.md) records the
+The [report contract](agent/game_detail_report.md) is implemented in the governed
+DTO/report and image-only batch path. The [source reference](reference/stratz-game-detail.md) records the
 three-game field audit and bounded performance probes separately from tests.
 
 Required deterministic checks:
@@ -994,6 +994,40 @@ must include minute ten-player queries, final earned income, partial assists,
 support counts, damage pairs and objective/reward facts, checking answers against
 source fields and the prepared report. Showing an image to users is not acceptance
 of model vision or accurate extraction of numbers from colours.
+
+Current checked scope:
+
+- Focused game-detail/report/STRATZ/registration/answer-boundary regressions passed
+  283 tests in one run; later heatmap storage-failure/route checks passed nine
+  tests, overlapping that run. These are not 292 distinct tests. They cover
+  explicit source associations, null/zero preservation, compact default tables,
+  report round trips and image-only persistence/cancellation/recovery.
+- Three live Service reads (`8960991322`, `9040460429`, `9040578015`) passed
+  identity, result round trips and populated all 30 final income/rate/level and
+  complete death-loss rows. Report minute counts were 65/49/57; each final table
+  has ten rows and each damage matrix 100 identity-bound cells. Completeness of
+  every future source field is not implied. Initial full-response sizes were
+  6.50/5.19/6.71 MB before compacting repeated report evidence; those are not
+  model context sizes. Compacting the same frozen facts put maximal single-minute
+  views at 23,164/22,650/22,339 UTF-8 bytes and final tables at
+  25,274/21,124/21,408 bytes before minor wording/label additions, below 35 KiB.
+- Five real-model questions against the frozen governed result exercised minute
+  statistics, final income/loss, damage directions, equipment/skills/objectives
+  and support counts. Two ten-player answer tables were checked programmatically:
+  70 minute numeric/null values and 50 final numeric values had no mismatches.
+  This does not certify every extra sentence in the answers.
+- Initial answers misdescribed a known-amount death-loss subtotal as timed-only,
+  confused ward kill ownership and chose a later 30:22 inventory observation for
+  state at 30:00. Action names, metric/time descriptions and report-first result
+  ordering were tightened. Targeted reruns corrected ward ownership and selected
+  the report's preceding 28:58 observation; wording still needs observation across
+  more questions. These small runs are not an error-rate estimate or a guarantee.
+- Heatmap generation, coalescing, pagination, integrity, expiry/quota, cancellation,
+  restart and failed index publication are checked with a dedicated synthetic
+  calibrated map. No production 7.41e map/calibration is verified or bundled;
+  the built-in registry is empty and production lookup returns map-unavailable.
+  Actual deployed performance, production-map alignment and frontend/model-vision
+  behavior remain unaccepted. No deployment was performed by these checks.
 
 ### Esports Match-to-OpenDota game resolution (offline core and opt-in tool implemented; live Provider and Agent acceptance pending)
 

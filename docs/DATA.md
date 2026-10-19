@@ -1239,10 +1239,10 @@ facts for `8960991322`; it does not certify universal availability or general
 coverage. Tool registration, descriptions, schemas and fixed supplements now
 implement this initial policy; unverified optional mappings stay unavailable.
 
-### Accepted default report and image-only heatmaps (not implemented)
+### Default report and image-only heatmap boundary
 
 [The report contract](agent/game_detail_report.md) defines the accepted next
-extension: program-built minute ten-player, final ten-player, interaction and
+extension, now implemented: program-built minute ten-player, final ten-player, interaction and
 event views from an expanded governed DTO. STRATZ remains first choice for
 verified fields; one OpenDota detail response supplies all fixed supplements.
 No per-field HTTP calls or model fallback are added. Current source reuse is
@@ -1267,11 +1267,19 @@ This is an explicit exception for the transient image-generation input, not a
 change to ordinary validated detail fidelity. Reusing images does not imply
 retaining their source. Regeneration requiring positions must re-fetch them.
 
-Image retention/quota/cleanup, authorization and reference/entry interfaces must
-be fixed before implementation/release of the image store. Do not assume the
-session Artifact store or static entity-image `display_ref` already supplies
-this lifecycle. Any new limits belong in root `.env`. No new setting, persisted
-image store or heatmap tool has been implemented yet.
+`GameDetailResult.report` contains these prepared views alongside the complete
+eight-section `data`. Support report counters omit repeated evidence paths;
+skill lines remain in DTO builds with a report-provided path. This keeps default
+tables compact without deleting their source-backed facts.
+
+The separate `game.heatmaps` tool and image route are implemented with a writable
+image-only file cache, seven-day TTL, 512 MiB quota, one rendering worker and
+eight in-flight/queued batches. Settings live in root `.env` under
+`DOTAMIND_HEATMAP_*`. Opaque expiring bearer references expose public-game images,
+not a private-account authorization system; no entity `display_ref` is reused.
+The built-in verified map manifest is empty: no calibrated 7.41e asset was
+established, so the sampled game returns a map-unavailable reason. Synthetic-map
+tests prove the pipeline, not production-map correctness or frontend display.
 
 ## Account-to-game evidence and local catalog labels
 

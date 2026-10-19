@@ -5,18 +5,18 @@
 This document is the sole detailed data contract for `game.detail`.
 
 - **Current implementation:** `game.detail` uses STRATZ as primary and fixed OpenDota supplements, returning the governed eight-section DTO with bilingual labels, time labels, normalized death facts, source-specific coverage, and pinned label versions.
-- **Accepted target:** retain the eight-section DTO, bilingual labels and STRATZ-first/fixed-OpenDota boundary; extend its verified facts for a program-built default report. The accepted additions and image-only heatmaps are specified in [the report contract](game_detail_report.md), not yet implemented.
-- **Implementation status:** the source policy, economic renames, death coverage, timed build observations, public Service/Artifact switch, and strict multi-source envelope are implemented. Three live games verify the initial mappings; unverified STRATZ time arrays, upgrade levels, complete income, and historical event encodings retain explicit limits. See [source evidence](../reference/stratz-game-detail.md) and [acceptance](../EVALS.md).
+- **Accepted target / implementation:** the eight-section DTO, bilingual labels, STRATZ-first/fixed-OpenDota boundary and program-built report are implemented. The [report contract](game_detail_report.md) owns report views and the separate image-only heatmap capability. Heatmap infrastructure is implemented; verified production map assets/calibration remain unavailable for the sampled version, so it does not publish substitute images.
+- **Verification scope:** three live games verify the governed detail/report path; unverified STRATZ minute arrays, precise terminal income and historical encodings retain explicit limits. Deterministic, live-source and real-model checks are separated in [EVALS](../EVALS.md).
 - **Use:** minute-by-minute state review and final-game statistics.
 - **Outside this contract:** performance ratings, role inference, lane-win judgments, teamfight classification, review recommendations, counterfactuals, simulated inventory states, and continuous map replay.
 
 This describes data and tool behavior. It does not define a frontend page or visual layout. Tables labelled implemented describe the current schema, not exclusions from the newly accepted report target below.
 
-### Accepted report-driven extensions (not implemented)
+### Report-driven extensions (implemented)
 
 The report contract owns the default minute/final/interaction/event views and
 heatmap lifecycle; this document remains the field/type/source owner for the
-eight-section DTO. The next DTO work must include:
+eight-section DTO. Its extensions include:
 
 - Final `cumulative_gold_earned = floor(goldPerMinute * durationSeconds / 60)`
   from STRATZ, with formula/input provenance, plus explicit final
@@ -43,7 +43,7 @@ eight-section DTO. The next DTO work must include:
   and whole Roshan/Aegis/building categories. No model-operated fallback.
 
 The source evidence is [the revalidated reference](../reference/stratz-game-detail.md).
-These target mappings do not silently change the currently implemented tables.
+The implemented mappings and the precise public fields are described below.
 Heatmaps have a separately accepted transient-position exception: only images
 and a small index persist, never source coordinates in the DTO or Artifact.
 
@@ -64,6 +64,7 @@ The public result has one provenance envelope:
 | `catalog_version` | object | The existing local entity-name resolver's snapshot metadata: `source`, `patch`, `generated_at`, and `schema_version`; one pinned snapshot per detail operation |
 | `unit_mapping_version` | string | Version of the validated, independently maintained unit mapping used for this result; not a game patch or a request timestamp |
 | `data` | `GameDetailData` | The eight governed sections below |
+| `report` | required `GameReport` | Program-prepared minute/final/damage/event views from the same governed data; no raw source body or nullable legacy result. Exact report fields are owned by [the report contract](game_detail_report.md). |
 
 The eight sections in `data` are `match`, `draft`, `players`, `economy`, `builds`, `events`, `interactions`, and `coverage`. Each section appears once. Section fields use `null` for missing or unknown source facts; source-declared empty collections remain empty collections. Catalog and unit-mapping versions occur once in the outer result, not on every entity or timeline node. These versions attribute static labels and mapping rules; they do not claim historical match-patch mechanics.
 
@@ -115,7 +116,7 @@ framework is required.
 
 | Group | Initial source policy |
 |---|---|
-| Match identity/result, draft, player identity/final statistics | STRATZ; `match.score` keeps explicit OpenDota final score fields until a STRATZ terminal-score mapping is verified |
+| Match identity/result, draft, player identity/final statistics | STRATZ; `match.score` sums each side's nonnegative integer kill buckets. Explicit OpenDota final side score supplements only an unavailable side. |
 | Player cumulative earned gold; team earned-gold/experience advantage | OpenDota `gold_t`, `radiant_gold_adv`, `radiant_xp_adv` with their verified axes |
 | Player minute experience/farming | STRATZ only after field-specific bucket validation; OpenDota `xp_t/lh_t/dn_t` with `times` is the explicit initial supplemental group while that verification is pending |
 | Deaths | Verified STRATZ death construction described below; explicit OpenDota death/kill evidence may supplement only with its scope recorded |
@@ -125,6 +126,8 @@ framework is required.
 | Roshan kills, Aegis pickups, specific building destructions | OpenDota explicit objective records, selected by whole category; do not stitch partial STRATZ messages into a supposedly complete list |
 | First blood | Preserve STRATZ reported time and explicit message facts separately; record disagreement |
 | Hero interactions | Verified explicit STRATZ target-damage facts; confirmed normalized deaths for kill counts; OpenDota direct hero maps for unsupported damage/healing groups |
+| Level, consumed upgrades, known ability ranks | STRATZ explicit level/buff/ability events; no use of `levelObtained` as hero level. Unknown IDs stay unknown. |
+| Support | STRATZ item uses/purchases and ward categories; a missing whole STRATZ ward category uses associated OpenDota placement logs and explicit placement/kill counters. Ward expiry logs are never ward kills. |
 
 A null STRATZ `data.match` returns `provider_error` with the message
 `STRATZ returned no record for the requested Valve game ID` and the requested
@@ -200,7 +203,7 @@ verified axis and matching empty metrics yield `minute_timeline=[]`. Minute-node
 a required integer, so an existing minute node always has a non-null label.
 Do not introduce a `minute` field or infer timestamps from array positions.
 
-All thirteen public timeline collections use records with their own
+The following core public timeline collections use records with their own
 `time_seconds` and `time_label`; none expose parallel time/value arrays:
 
 | Collection | Payload bound to each time |
@@ -218,6 +221,11 @@ All thirteen public timeline collections use records with their own
 | `events.aegis_pickups` | Pickup player slot |
 | `events.first_blood.objective_events` | Explicit first-blood objective fact |
 | `events.other_objectives` | Explicit courier, Tormentor or other objective fact |
+
+`players[].level_events`, `players[].support.events`, and
+`builds.players[].permanent_upgrade_events` also use the same time/label pair.
+Minute/report `level_observed_at_seconds` has `level_observed_at_label`; it is
+the actual previous observation time, never a relabelled minute boundary.
 
 Time and payload correspondence is constructed and validated below the public
 capability boundary. Item slots remain ordered lists inside one inventory
@@ -297,7 +305,7 @@ mapping must pass its semantic gate before it supplies a strongly named field.
 | `duration_seconds` | integer or `null` | STRATZ `durationSeconds`, representing formal game duration. Do not add a pre-game/BP duration. |
 | `duration_label` | string or `null` | Program-formatted `duration_seconds` under the game-relative time-label rules above. |
 | `game_winner` | `"radiant"`, `"dire"`, or `null` | Strict STRATZ `didRadiantWin` boolean mapping: true gives `radiant`, false gives `dire`, unknown gives `null`. |
-| `score` | object or `null` | Explicit OpenDota final `radiant_score` and `dire_score` under those side keys. STRATZ `radiantKills/direKills` are arrays; do not use their lengths or unverified last buckets as final scores. |
+| `score` | object or `null` | Sum STRATZ `radiantKills/direKills` integer nonnegative buckets by side; unavailable sides use explicit OpenDota `radiant_score/dire_score`. Do not use array length, last bucket or player kill totals. |
 | `competition` | `null` | Deliberately unpopulated in this version. A future PandaScore-context decision may define it separately; do not copy an OpenDota League body, mix ID namespaces, or report this scope exclusion as a per-game source gap. |
 | `teams` | side-keyed object or `null` | This game's STRATZ radiant/dire team identities, with source attribution in coverage. |
 
@@ -337,7 +345,9 @@ timings, ratings, and predicted win rates remain excluded.
 
 **Responsibility:** preserve per-player identity, final statistics, and source-aligned minute observations.
 
-Each player has three parts: `identity`, `final_stats`, and `minute_timeline`. Keep player records in source array order.
+Each player has `identity`, `final_stats`, `minute_timeline`, `level_events` and
+`support`. Keep player records in source array order. Level events contain
+`time_seconds/time_label/level`; their absence does not infer initial state.
 
 `identity` contains nullable `account_id` from STRATZ `steamAccountId`,
 `player_slot` from validated `playerSlot`, and `hero` from `heroId`. Source-provided
@@ -347,7 +357,7 @@ STRATZ mappings. Strictly map `isRadiant` to `side` (`radiant`, `dire`, or `null
 sample uses 0–4 and 128–132; validate the encoding rather than equating slot with
 array index. Names do not prove identity. Facet/role inference remains excluded.
 
-`final_stats` contains the ten target fields below. Paths are relative to the
+`final_stats` contains the fields below. Paths are relative to the
 STRATZ player unless another source is named:
 
 | Target fields | Type of each field | Source |
@@ -355,10 +365,17 @@ STRATZ player unless another source is named:
 | `kills`, `deaths`, `assists` | integer or `null` | Same-name source fields |
 | `level` | integer or `null` | `level` |
 | `last_hits`, `denies` | integer or `null` | `numLastHits`, `numDenies` |
+| `gold_per_minute`, `experience_per_minute` | nonnegative integer or `null` | `goldPerMinute`, `experiencePerMinute` |
+| `cumulative_gold_earned` | nonnegative integer or `null` | `floor(goldPerMinute * durationSeconds / 60)`; missing inputs yield null. Coverage records the formula/input paths; not an exact final counter. |
+| `death_gold_lost` | nonnegative number or `null` | Sum explicit linked death amounts only when all source final deaths and amounts are covered; time may be unknown. |
+| `known_death_gold_lost`, `death_gold_lost_count` | nonnegative number / integer or `null` | Known-amount subtotal and number of deaths with known amounts, including supported unknown-time deaths. Neither counts only timed deaths. Unavailable death source yields null. |
 | `earned_gold_net_worth_gap` | number or `null` | Reliable cumulative earned gold minus net worth, at the same final instant; rules below |
 | `hero_damage`, `tower_damage`, `hero_healing` | number or `null` | `heroDamage`, `towerDamage`, `heroHealing` |
 
-These are final values, not values copied from the last minute sample. Assists and level have final values only; hero damage, tower damage, and hero healing also stay here rather than entering the first-version minute timeline. Missing source values are `null`; explicit zeros remain zero.
+These are final values, not values copied from the last minute sample. Assists
+remain final-only until a complete minute mapping exists; minute level uses
+explicit level events. Hero damage, tower damage and healing stay final values.
+Missing source values are null; explicit zeros remain zero.
 
 `earned_gold_net_worth_gap` is “累计金币与净值差”, not pure death gold loss.
 Consumables, other expenditure, asset valuation, and differing observation bounds
@@ -372,11 +389,11 @@ Do not clamp a negative difference or invent a causal breakdown.
 
 Public `final_stats.net_worth` is removed, without an alias/raw escape hatch.
 Original net-worth facts remain internal for validation and existing consumers.
-Wallet/spend/rate fields, extra scoreboard fields, ratings, and role judgments
+Wallet/spend fields, unapproved extra scoreboard fields, ratings, and role judgments
 remain excluded. Final death count remains the source total even when event
 coverage is partial.
 
-`minute_timeline` is a list of records with these eight fields:
+`minute_timeline` is a list of records with these fields:
 
 | Field | Type | Source and rule |
 |---|---|---|
@@ -388,11 +405,14 @@ coverage is partial.
 | `denies` | number or `null` | Same-index `dn_t` value |
 | `kills` | integer or `null` | Count confirmed player-attributed kill facts at or before this node; no raw STRATZ kill-event length counting |
 | `known_deaths` | integer or `null` | Count `events.hero_deaths` rows for this victim with known time at or before the node; records with unknown time do not enter the curve |
+| `assists` | `null` | Complete minute attribution is unverified; not zero or an inferred count. |
+| `level` | integer or `null` | Latest unique explicit level observation at or before the minute; no future observation or final-level backfill. |
+| `level_observed_at_seconds`, `level_observed_at_label` | number / string or `null` | That level observation's own time and program label. |
 
 `last_hits` and `denies` initially use OpenDota `lh_t/dn_t` on their own `times`.
 Do not presume STRATZ `lastHitsPerMinute/deniesPerMinute` are cumulative counters
 before verifying their bucket semantics. No minute `net_worth`, replacement gap,
-assists, level, or equipment is emitted. All public values sourced from `gold_t`
+inferred assists or embedded equipment list is emitted. All public values sourced from `gold_t`
 use `cumulative_gold_earned`; the earlier `earned_gold` alias is removed.
 
 Do not align different series merely by array length, interpolate, or append final
@@ -401,6 +421,14 @@ An unavailable death source yields `known_deaths=null`; partial timed evidence
 can produce a known-count curve with explicit partial coverage. Zero means zero
 known timed deaths, not proof of zero total deaths. Preserve final totals and
 coverage of unknown-time and unassociated facts independently.
+
+`support` contains `events` and `totals`. Each event binds its time/label, bilingual
+item, action and nonempty `source_paths`; each total binds the item/action, count,
+`scope` (`source_total` or `known_events`) and source paths. Actions are `used`,
+`ward_placed`, `ward_killed_by_player` and `purchase_record`. Ward kills are
+attributed to the killing player, not the owner of the lost ward. A purchase
+record is not a purchased-unit count. Missing item/action totals stay unknown;
+combination-ward uses do not split into placements. Gem holding time is not derived.
 
 ### 4. `economy`
 
@@ -450,19 +478,20 @@ Each player build is associated by `player_slot` and contains:
 
 | Subsection | Target fields and source |
 |---|---|
-| `final_loadout` | Six `inventory` slots from STRATZ `item0Id..item5Id`, three `backpack` slots from `backpack0Id..backpack2Id`, and nullable `item_neutral` from `neutral0Id`. Preserve positions and empty/unknown distinctions. Retained `item_neutral2`, `aghanims_scepter`, `aghanims_shard`, and `moonshard` use same-name OpenDota fields until a STRATZ mapping is verified; no timing or boolean interpretation is added. |
+| `final_loadout` | Six `inventory` slots from STRATZ `item0Id..item5Id`, three `backpack` slots from `backpack0Id..backpack2Id`, and `item_neutral` from `neutral0Id`. `item_neutral2` is the OpenDota enhancement supplement. Legacy numeric upgrade fields retain their OpenDota values; `has_consumed_scepter/has_shard/has_consumed_moon_shard` are explicit STRATZ buff-presence facts, supplemented by associated OpenDota 0/1 flags when unknown. Held Scepter is separate from consumed status. |
 | `inventory_events` | Ordered STRATZ `playbackData.inventoryEvents`: `time_seconds`, derived `time_label`, six-position `inventory`, three-position `backpack`, and nullable `item_neutral`. Slots contain `{item: entity or null, charges: number or null}` from the corresponding `itemN/backPackN/neutral0` objects. A missing whole slot is null with coverage; a known empty slot has `item=null`. Preserve observed source snapshots, not inferred acquisition/removal actions. |
 | `purchase_events` | Initially STRATZ `stats.itemPurchases`, in source order: `time_seconds` from `time`, derived `time_label`, `item` from `itemId`, nullable `charges` only if explicitly provided. Do not merge this list with `playbackData.purchaseEvents`; their differing counts do not establish the same semantics or completeness. |
-| `ability_upgrade_events` | STRATZ `playbackData.abilityLearnEvents`: `time_seconds`, `time_label`, `ability` from `abilityId`, and nullable `level` from `level` after validating its meaning. Preserve repetitions and talents. Unverified `levelObtained` encoding does not supply a hero level. Replaces the untimed `ability_upgrade_sequence`, without duplicating the same upgrades. |
+| `ability_upgrade_events` | STRATZ `playbackData.abilityLearnEvents`: time/label, bilingual ability, `level=source.level+1` for known nonzero ability IDs and valid nonnegative ranks, plus nullable `is_talent/is_ultimate`. Unknown ability ID 0 has null identity/rank with scalar coverage evidence. `levelObtained` never supplies a hero level. |
 | `neutral_item_history` | Retained OpenDota records: `time_seconds` from `time`, derived `time_label`, `item` from `item_neutral`, and `enhancement` from `item_neutral_enhancement`; entity values are nullable. Retain source order and partial records. The action remains unverified. |
+| `permanent_upgrade_events` | Explicit STRATZ `stats.matchPlayerBuffEvent`: time/label, bilingual item, nullable `stack_count`, `upgrade=consumed_scepter/shard/consumed_moon_shard` for verified IDs 108/609/247. Absence alone does not prove inactive state. |
 
 Keep component and completed purchases as separate source records. Do not infer
 recipe links, missing completions, total spend, delivery, or usability. Inventory
 observations come only from explicit timed snapshots, never purchase
 reconstruction, and stay outside `players.minute_timeline`. Untimed
 `inventoryReport` entries do not receive guessed minute timestamps. Additional
-teleport/permanent-buff fields are excluded. Neutral-history actions and the
-second neutral slot remain unverified, not two confirmed equipped items.
+teleport fields are excluded. Neutral-history actions remain unverified; the
+second neutral slot is an enhancement, not a second ordinary equipped item.
 
 ### 6. `events`
 
@@ -563,6 +592,7 @@ Additional target event fields are:
 | STRATZ messages | `time_seconds` from `chatEvents[].time`; `type` from a verified chat code. Target/actor/player fields stay null without separately verified payload semantics. Preserve unverified present scalar evidence in coverage. |
 | Other source codes | Present unverified `slot`, `team`, `killer`, `value`, or non-unit `key` values remain scalar evidence in coverage with exact source paths. They do not become business identities or inferred rewards. Missing optional values require no warning. |
 | Objective players | `player_slot` and `victim_player_slot` are populated only from explicit same-name source fields matching one unique player slot in this record. A bare `slot`, `team`, or `killer` never supplies a player identity. |
+| Tormentor reward | Nullable `reward_player_slot/reward_item`; only a unique message hero, unique same-game player slot, unique same-time type-117 message and unique same-time explicit Shard buff supply the recipient. Include both source paths. Do not supply the killer from this relation. |
 | First blood | Nullable `reported_time_seconds` from STRATZ `firstBloodTime`, derived `reported_time_label`, and nullable `objective_events` from explicit first-blood messages. Preserve exact source paths and material disagreements; neither overwrites the other. |
 
 Buyback and objective records likewise include `time_label` derived only from
@@ -578,7 +608,8 @@ selected category without claiming a total ordering across providers.
 
 ### 7. `interactions`
 
-**Responsibility:** three per-player views of hero targets: `kills_by_target`, `damage_by_target`, and `healing_by_target`.
+**Responsibility:** per-player `kills_by_target`, `damage_by_target`,
+`damage_received_by_source` and `healing_by_target`.
 
 The structure is `interactions.players[]`; each player entry contains `player_slot`
 (integer or `null`) and the three target lists. Each target record contains
@@ -593,6 +624,7 @@ The projector uses local bilingual entity objects as specified above, without re
 |---|---|---|
 | `kills_by_target` | Confirmed normalized death events with validated credited killer and victim | Count confirmed hero pairs; partial event coverage remains partial, not a complete kill matrix |
 | `damage_by_target` | STRATZ `stats.heroDamageReport.dealtTargets` after target namespace validation; initial supplement OpenDota `players[].damage` for unsupported target mappings | Hero entries only; preserve explicit amount |
+| `damage_received_by_source` | STRATZ `stats.heroDamageReport.receivedTargets` | Each row is `{source_hero,value}`; identify the attacking hero rather than treating it as another target. Unverified identities stay unknown. |
 | `healing_by_target` | OpenDota `players[].healing` until a verified STRATZ per-target healing source is available | Hero entries only, including self-healing; preserve explicit amount |
 
 Retain source order for direct maps and first-confirmed-pair order for event
@@ -708,7 +740,7 @@ This contract does not promise a DTO byte-size target. The old 105 KB and 215 KB
 
 | Kind | Item |
 |---|---|
-| Current implementation scope | `competition=null`, the ten currently implemented final-stat fields, no minute net worth, only `source_team_id`/`name` for teams, no ratings or inferred replay facts. The accepted report target extends final stats, state facts, support and interactions; its image-only heatmaps are separate from frontend layout, replay parsing and a background League index. |
+| Current implementation scope | `competition=null`, the documented final-stat/rate/income/death-loss fields, no minute net worth, only `source_team_id`/`name` for teams, no ratings or inferred replay facts. Reports include state facts, support and interactions; image-only heatmaps are separate from frontend layout, replay parsing and a background League index. |
 | Source-semantic limits | OpenDota's second neutral slot is the accepted enhancement supplement; STRATZ has no verified corresponding slot. Neutral-history actions remain unverified. New actor/team/reward encodings require evidence; the report target permits only its individually verified same-player/time Shard association for a Tormentor recipient. |
 | Mapping gaps | `dota_unknown` is explicit source uncertainty. Sampled `guardian_shell` has no exact record in the checked local Catalog; keep that field unknown with scalar evidence until a verified mapping is added. Neither blocks other match facts. |
 | Implemented enrichment | Bilingual entity/unit objects, event conversion, snapshot provenance, and scalar mapping-gap fields are implemented and tested together with public tool/Artifact output. Unknown names/keys remain explicit. |

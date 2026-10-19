@@ -164,3 +164,20 @@ OpenDota `total_gold` 计算定义见
 未包括终局额外十图、正式地图、磁盘/对象存储、任务排队和传输。没有验收坐标标定、
 死亡期间位置、共同色标或精确停留权重。样本只支持“渲染量级可控”的判断，不是
 图片质量、存储上限或通用性能保证；正式图纹理可能改变体积。
+
+## 地图版本与发布缺口
+
+热力图实现前再次读取 `constants.gameVersions {id,name}`，STRATZ 明确返回
+`gameVersionId=189` 为 `7.41e`。同次核对的
+[OpenDota DotaMap 实现](https://github.com/odota/web/blob/master/src/components/DotaMap/DotaMap.tsx)
+列表从 `7.40` 开始，未列 `7.41`，不能据此断言 7.40 图片适合 7.41e。
+[OpenDota Heatmap 实现](https://github.com/odota/web/blob/master/src/components/Heatmap/Heatmap.tsx)
+有自己的坐标转换与 127 单位缩放，也不自动证明 STRATZ 的坐标映射相同。
+这些是所核对版本的事实，不代表今后上游不会补齐图片。
+
+本场位置流范围检查支持数据存在，但不以观测点的最小/最大值自动拉伸整张地图。
+生产注册表 `app/data/maps/heatmaps.json` 因此保持空 `maps`，而不是放入未经核验的
+底图。每个可发布条目必须有明确的 `game_version_ids`、`verified=true`、核验
+`evidence`、相对底图路径 `image`、`sha256`、`x_min/x_max/y_min/y_max` 与
+`flip_y`。图片内容、地图版本、授权及坐标标定应一起核对；渲染器只接受唯一匹配。
+合成测试地图只能验证代码方向和窗口，不替代上述来源证据。

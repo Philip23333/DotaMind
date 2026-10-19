@@ -2,9 +2,10 @@
 
 ## 状态与归属
 
-**已确认目标，尚未实施。** 当前八部分 DTO 仍以
-[game_detail_data.md](game_detail_data.md) 的“当前实现”章节为准。本文件拥有默认
-报表的数据组织和热力图产物规则，不表示已增加工具、后台任务、图片接口或前端面板。
+**DTO、默认报表与热力图基础链路已实施；正式地图发布尚未验收。** 八部分 DTO 的
+字段归属为 [game_detail_data.md](game_detail_data.md)。本文件拥有报表组织与热力图
+产物规则。`game.detail` 返回 `report`；独立 `game.heatmaps` 提供后台批次入口。
+内置已验证地图注册表目前为空，样本的 7.41e 底图/坐标尚未完成校准，不发布替代图片。
 源字段核验和性能样本见 [STRATZ 来源参考](../reference/stratz-game-detail.md)。
 
 Decision：先由程序组织可复核的固定数据报表，再让模型阅读、分析和追问。
@@ -29,8 +30,22 @@ Not included：程序生成分析结论、评分、角色判断、团战分类�
 `GameDetailService` 及其能力内部投影负责来源选择、确定性关联和报表组装。
 Runtime、Catalog 和通用 Artifact 工具不学习比赛口径或热力图算法。
 报表是治理数据的确定性视图，不替代完整 DTO，不开原始 Provider 响应的旁路。
-它不是第九个业务 section。报表的具体工具返回位置/调用入口在实施时单独收口，
-不在本次文档中虚构已经注册的新工具。
+它不是第九个业务 section。`game.detail` 的外层 `report` 与 `data` 并列；
+报表和完整治理 DTO 经同一逻辑结果进入 Artifact，不建立原始源对象旁路。
+
+| `report` 字段 | 当前结构 |
+|---|---|
+| `schema_version` | `1` |
+| `match/draft` | 同一治理 DTO 的比赛与选禁事实 |
+| `minute_snapshots[]` | `time_seconds/time_label` + `players[]`；每行有完整 `identity`、累计收入、等级及真实观测时间、已知 K/D、未知 A、正反补、`inventory_observation/neutral_observation`、`upgrades`、`support_known_counts` |
+| `final_players[]` | `identity/final_stats/final_loadout/support`，以及 `ability_upgrade_events_path`，指向同一结果的 `$.data.builds.players[i].ability_upgrade_events` |
+| `damage_matrix[]` | 攻击者/目标槽位与双语英雄、`dealt`、`received_view`、`agreement=consistent/conflict/single_view/unreported`；未报告组合为 null |
+| `events[]` | 时间/标签、`kind` 与完整治理 `fact`；每次英雄死亡只占一行，关联的击杀不重复 |
+| `coverage/limitations` | 原治理覆盖范围与固定口径说明，无模型评分 |
+
+报表辅助计数仅保留物品、动作、计数及覆盖口径；完整来源路径和技能事件留在 DTO，
+不随每一分钟重复。三场样本整分钟十人表约 22–24 KiB、终局十人表约 21–25 KiB；
+不是通用大小保证。更大结果仍遵守通用 35 KiB 单次返回边界与分页规则。
 
 保留一次 OpenDota 整场详情读取供所有固定补充组共享；同一请求中已有成功读取可
 复用。不得因增加一个字段再发一次详情请求，也不把补充任务交给模型。当前两源
@@ -49,18 +64,18 @@ Runtime、Catalog 和通用 Artifact 工具不学习比赛口径或热力图算�
 分钟表按 `time_seconds/time_label` 分组，每个时间点包含同场十名玩家；同一行带
 `player_slot`、可用账号身份和英雄身份，缺值不会导致丢掉整名玩家或整个时间点。
 
-| 报表数据 | STRATZ 优先路径及治理规则 | OpenDota 补充 / 当前 DTO 缺口 |
+| 报表数据 | STRATZ 优先路径及治理规则 | 当前实现与限制 |
 |---|---|---|
 | 累计获得金币 | 钱包 `gold`、`goldSpent`、净值和每分钟金币数组均不能替代累计收入 | `times + gold_t` → `cumulative_gold_earned`，当前已具备 |
-| 等级 | `playbackData.playerUpdateLevelEvents {time,level}`，使用边界之前最近的明确等级更新，保留观测时间；没有起始依据时未知 | 当前仅有终局等级，需要分钟等级投影；默认表不展示原始 XP 数字，原有累计 XP 仍可供追问 |
+| 等级 | `playbackData.playerUpdateLevelEvents {time,level}`，使用边界之前最近的明确等级更新，保留观测时间；没有起始依据时未知 | `players[].level_events` 与分钟/报表等级已投影；默认表不展示原始 XP 数字，原有累计 XP 仍可供追问 |
 | 击杀 / 死亡 | 从一次归一化的死亡事实累计已确认击杀和已定位死亡；未知攻击者不抹掉死亡 | 当前有 `kills/known_deaths`；部分事件不能冒充完整 K/D |
 | 助攻 | 原始助攻事件及死亡记录的 assist 列表不能直接累计为完整 A | 当前没有完整分钟 A；未建立完整映射前显示 `null`，单独保留已确认助攻证据及部分覆盖，不补零、不造完整曲线 |
 | 正补 / 反补 | STRATZ `csEvents` 或分钟数组只有在该字段的语义、时间轴与覆盖验证通过后才能供应 | 首版继续使用 `times + lh_t/dn_t`；某场 STRATZ 空事件/全零数组不能抹掉有效 OpenDota 数据 |
-| 主物品栏、背包、中立装备 | `playbackData.inventoryEvents`；读取边界之前最近的明确库存观察并带 `observed_at` | 当前有库存事件，需报表关联；它是最近已知观察，不是该秒精确库存，不从购买推算 |
+| 主物品栏、背包、中立装备 | `playbackData.inventoryEvents`；读取边界之前最近的明确库存观察，使用记录自己的时间/标签 | 已在 `inventory_observation` 关联；只选不晚于边界的观察，即使未来快照在绝对秒数上更近也不采用；不从购买推算 |
 | 中立强化 | STRATZ 所查库存 schema 没有可靠第二中立槽映射 | `item_neutral2` 供应终局；带时间的 `neutral_item_history` 供应明确历史观察，不能给终局槽位编造时间 |
-| 神杖、魔晶、银月状态 | `stats.matchPlayerBuffEvent` 中确证的消耗神杖、魔晶、银月永久升级；神杖持有状态另从库存观察取得 | 当前仅有 OpenDota 终局辅助字段，需 STRATZ 状态事件投影；区分持有神杖与已消耗神杖，购买不等于激活；无完整状态来源时未知 |
-| 技能与天赋 | `playbackData.abilityLearnEvents` 的明确时间、技能、天赋标记；已验证的技能等级编码按源 `level+1` 转换 | 当前有升级事件但等级映射仍待实施。默认可展示加点线路；只有事件覆盖完整才能生成分钟加点状态。`abilityId=0` 保持未知，不按顺序猜技能；`levelObtained` 不充当英雄等级 |
-| 辅助性贡献 | 使用、插眼、排眼、购买分别统计，见下一节 | 当前缺固定的辅助统计和事件投影；首场 STRATZ 眼事件缺失时用明确 OpenDota 对应组 |
+| 神杖、魔晶、银月状态 | `stats.matchPlayerBuffEvent` 中确证的永久升级；神杖持有状态另从库存观察取得 | 已有永久升级事件与报表状态；终局未知状态可补经关联 OpenDota 0/1 标志。购买不等于激活，缺事件不自动为 false |
+| 技能与天赋 | `playbackData.abilityLearnEvents` 的明确时间、技能、天赋标记；已验证等级按源 `level+1` 转换 | 已实现加点线路与跳转路径；不额外合成完整分钟技能状态。`abilityId=0` 未知；`levelObtained` 不充当英雄等级 |
+| 辅助性贡献 | 使用、插眼、排眼、购买分别统计，见下一节 | `players[].support.events/totals` 和报表聚合已实现；首场 STRATZ 眼事件缺失时用明确 OpenDota 对应组 |
 
 Minute table 是报表视图，不要求把完整装备对象、技能列表和所有辅助事件重复写进每个
 玩家的 DTO 分钟节点；保留一次事件/状态事实后按明确时间组织，避免重复大对象。
@@ -77,6 +92,8 @@ Minute table 是报表视图，不要求把完整装备对象、技能列表和�
   不拆成臆造的真假眼放置数量。
 - 明确眼放置/摧毁事件分别供应插眼和排眼。先验证玩家、类型与事件编码；STRATZ
   相应组缺失时，Service 使用固定的 OpenDota 眼事件/统计补充，不拼重两源同类事件。
+  动作明确命名为 `ward_placed`、`ward_killed_by_player`；后者表示该玩家排掉的眼，
+  不是该玩家自己的眼被摧毁。`used`、`purchase_record` 保持独立；眼消失日志不算排眼。
 - 宝石可展示购买、使用和已知库存观察；没有完整转移链时，不计算精确持有时长、
   交接次数或失落归因。不把宝石使用次数写成持有贡献。
 - 分钟显示截至该边界的已知累计量，终局显示相应口径的累计量；各组独立标明覆盖。
@@ -84,17 +101,17 @@ Minute table 是报表视图，不要求把完整装备对象、技能列表和�
 
 ### 终局十人表与交互表
 
-| 报表数据 | 目标来源与规则 | 当前 DTO 到目标的缺口 |
+| 报表数据 | 来源与规则 | 当前实现与限制 |
 |---|---|---|
 | 累计获得金币 | `floor(goldPerMinute × durationSeconds / 60)`，任一输入未知则 `null`；STRATZ 供应两输入 | 新增终局 `cumulative_gold_earned`，在 coverage 记载公式与输入路径；它是 GPM/时长推导值，不是精确末帧金币计数 |
-| K/D/A、等级、正反补、GPM、XPM | STRATZ 明确终局字段 | K/D/A、等级、正反补已具备；需增加 `gold_per_minute/experience_per_minute` |
-| 装备、背包、中立与强化 | STRATZ 明确终局槽位，OpenDota 补中立强化 | 主装备等已具备；强化语义及覆盖需按新核验落地，不能只取最后库存事件代替终局 |
-| 永久升级状态 | STRATZ 明确 buff 事实；与持有装备状态分开 | 需增加经过语义验证的终局状态投影；缺事件不能自动当作未激活 |
+| K/D/A、等级、正反补、GPM、XPM | STRATZ 明确终局字段 | 已投影；终局字段不从分钟回填 |
+| 装备、背包、中立与强化 | STRATZ 明确终局槽位，OpenDota 补中立强化 | 已投影；不是最后库存观察或最后整分钟的别名 |
+| 永久升级状态 | STRATZ 明确 buff 事实；与持有装备状态分开 | 已有 `has_consumed_scepter/has_shard/has_consumed_moon_shard`；缺事件不自动当作未激活 |
 | 英雄伤害、建筑伤害、治疗 | STRATZ `heroDamage/towerDamage/heroHealing` | 已具备；不要求与另一个报表口径的逐目标伤害之和相等 |
-| 对英雄造成 / 承受伤害 | `stats.heroDamageReport.dealtTargets/receivedTargets {target,amount}`，验证同场双方 | 当前需补收到的伤害视图和报表矩阵；保留攻击者→目标的身份，反向视图不生成第二份伤害事实 |
-| 死亡损失金币 | 唯一关联的归一化死亡记录 `gold_lost` 求和；任一死亡未覆盖或金额未知时，完整总量为 `null`，可另列已知小计 | 当前有逐次死亡金额，需增加终局累计；合法零扣款仍计入覆盖 |
+| 对英雄造成 / 承受伤害 | `stats.heroDamageReport.dealtTargets/receivedTargets {target,amount}`，验证同场双方 | 已有承伤视图和矩阵；反向视图不生成第二份伤害事实 |
+| 死亡损失金币 | 唯一关联死亡的 `gold_lost` 求和；任一死亡未覆盖或金额未知时完整总量为 null | `death_gold_lost`、`known_death_gold_lost`、`death_gold_lost_count` 已实现；已知金额小计包含金额已知但时间未知的死亡，不等于仅对已定位死亡求和 |
 | 累计金币与净值差 | 现有 `earned_gold_net_worth_gap` 仍要求可靠的同一终局时刻输入 | 不得把上述 GPM 推导金币视为满足精确输入的证明；不满足则继续 `null`，不改称死亡扣钱 |
-| 辅助性贡献 | 采用上一节的独立使用、插眼、排眼、购买及已知装备事实 | 需补 DTO 与报表聚合；不合成为评分 |
+| 辅助性贡献 | 采用上一节的独立使用、插眼、排眼、购买及已知装备事实 | 已投影；不合成为评分 |
 
 逐英雄伤害矩阵以十人的固定身份为行列，已确认的数据可展开为 `a→b`、`a→c` 等。
 来源未提供的自身/友方组合是 `null`，不是自动补零。STRATZ 样本通常每人有五个
@@ -151,19 +168,39 @@ Decision：首次明确请求后后台生成整场图片；普通 `game.detail` 
 
 图片复用键包含 Valve ID、玩家、累计截止时间和相关地图/渲染版本；索引保留来源
 获取时间，不承诺反映后来重新解析的比赛数据。图片服务与临时会话 Artifact 不是
-同一种持久化。具体保留时长、总量上限、清理责任、访问授权及图片引用接口尚未
-定值，属于热力图上线前的必备实施决策；不能默认无限保留，也不能静默套用实体图标
-`display_ref`。如增加配置，统一进入根 `.env`，不散落为绘图代码中的独立常量。
+同一种持久化。当前实现采用单进程单渲染批次、最多八个在途/排队批次、七天 TTL、
+512 MiB 图片与索引缓存；访问/新写入时清理过期和最早到期的非活动批次。Compose
+提供独立可写命名卷，重启后读取已完成图片索引，中断批次标为部分/失败，不重存位置。
+配置全部从根 `.env` 读取：`DOTAMIND_HEATMAP_DIR`、`DOTAMIND_HEATMAP_MAP_MANIFEST`、
+`DOTAMIND_HEATMAP_RETENTION_SECONDS`、`DOTAMIND_HEATMAP_MAX_BYTES`、
+`DOTAMIND_HEATMAP_MAX_JOBS`、`DOTAMIND_HEATMAP_MAX_POINTS`（默认 500000）、
+`DOTAMIND_HEATMAP_MAX_DURATION_SECONDS`（默认 14400）。
+
+`game.heatmaps(valve_game_id, action="get", offset=0, limit=20)` 首次 get 排队，后续
+复用/分页；`action="retry"` 显式重试已结束批次，`cancel` 取消。每页最多 30 图，
+返回状态、来源/版本、预期/已生成数量和 `next_offset`。不鼓励模型在同一回答中
+反复轮询。工具只有执行阶段可用，不把可能新增远程数据的操作伪装成回答阶段本地读取。
+
+图片引用 `/api/v1/game/heatmaps/assets/{batch_id}/{slot}/{cutoff}.png` 使用不可猜测的
+32 位十六进制批次令牌作为只读 bearer capability。对象是可由 Valve ID 查询的公开
+比赛派生图片；持有引用即可读取，不承诺账号级私有授权或多租户隔离。过期、未知、
+缺失、校验失败统一 404，读取不会开始生成；返回 `private, no-store`。没有套用实体
+图标 `display_ref`，也没有改前端渲染协议。多 worker/多副本共享生成协调不在首版范围。
+
+地图 manifest 按明确 `gameVersionId` 绑定底图、SHA-256、坐标边界、Y 方向及核验证据。
+内置 `app/data/maps/heatmaps.json` 的 `maps` 为空：本轮只验证了专用测试地图的完整
+链路，没有把 7.40 底图冒称为 7.41e。无已验证映射时返回 `unavailable` 与
+`map_not_calibrated_for_game_version`，不发布占位地图；这仍是正式图片上线的实际缺口。
 用户显示图片不等于当前模型支持看图，首版不承诺模型从颜色提取数值结论。
 
 ## 实施顺序与验收边界
 
-1. 扩展能力拥有的 DTO 字段与来源映射：终局收入/GPM/XPM、等级、永久状态、
+1. 已扩展能力拥有的 DTO 字段与来源映射：终局收入/GPM/XPM、等级、永久状态、
    技能、支持事件、伤害和死亡损失聚合；保持 OpenDota 固定补充和源身份校验。
-2. 实现程序化报表组装，验证每条记录的玩家、时间和指标；真实模型覆盖默认阅读与
+2. 已实现程序化报表组装，验证每条记录的玩家、时间和指标；真实模型覆盖默认阅读与
    后续追问。DTO/报表完整数据仍经 Artifact 按需读取，不一次塞入全部模型上下文。
-3. 收口图片存储生命周期与入口后，实施独立的热力图生成与复用，再验收地图校准、
-   部分失败、取消和原始位置不留存。性能基准不等于正式地图效果或部署资源验收。
+3. 图片存储、后台生成和复用已实施；确定性测试覆盖失败、取消和原始位置不留存。
+   正式地图校准、生产图片展示、部署资源及多副本协调不因这些测试自动通过。
 
 本文件只记录已确认方向及明确限制，不把文档提交当作功能完成。详细验收属于
 [EVALS.md](../EVALS.md)，实施顺序属于 [ROADMAP.md](../ROADMAP.md)。

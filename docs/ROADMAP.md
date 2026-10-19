@@ -511,14 +511,14 @@ where the initial mappings cannot supply them.
 Frontend, background League-index backfill, replay parsing, new storage,
 deployment, and ratings/inferred analytics are outside this migration.
 
-### Default game report and image-only heatmaps (accepted; not implemented)
+### Default game report and image-only heatmaps (implemented pipeline; map acceptance pending)
 
 Owner: [report contract](agent/game_detail_report.md); DTO fields remain owned by
 [game_detail_data.md](agent/game_detail_data.md). Source evidence is in the
 [reference](reference/stratz-game-detail.md), not an implementation-completion log.
 
-Implement in dependency order, keeping each code boundary and focused tests in
-its own commit:
+The following implementation boundaries are connected and tested; their long-term
+responsibilities remain separate:
 
 1. Extend final-stat mappings with GPM-derived earned income, GPM/XPM and
    complete/partial explicit death-gold-loss aggregates; keep exact-gap gates.
@@ -532,15 +532,19 @@ its own commit:
 4. Build deterministic default minute/final/interaction/event reports, including
    verified Tormentor-Shard recipient associations. Keep full governed detail
    inspectable and run real-model coverage against source and report facts.
-5. Before image implementation, settle retention/quota/cleanup, authorization
-   and invocation/reference interfaces. Then build the independently requested,
+5. The image path uses seven-day TTL, 512 MiB cache, one rendering worker/eight
+   in-flight batches, explicit game.heatmaps invocation and opaque expiring bearer
+   references for public-game images. It is independently requested,
    bounded background heatmap path: one transient position read, 256×256
    cumulative five-minute plus final images, small provenance index and reuse.
    No raw position persistence or generic job framework. Validate actual map
    coordinates, failure/cancellation, duplicate work and deployed resource use.
 
-Steps are implementation boundaries, not a claim that all image-interface or
-storage settings were already chosen. Ordinary detail does not block on images;
+The built-in calibrated-map manifest remains empty. The sample's 7.41e map must
+be sourced, versioned and calibrated before real images can be published. Tests
+with a dedicated synthetic map do not close that gap. Production deployment,
+frontend image display and multi-replica coordination have not been accepted.
+Ordinary detail does not block on images;
 no frontend detail-page design, replay parsing, provider router or model code
 executor is included. Performance samples do not replace the pending acceptance
 defined in [EVALS.md](EVALS.md).

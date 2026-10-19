@@ -128,8 +128,9 @@ programming, local resource and storage errors keep their normal behavior.
 The capability owns economic naming, normalized deaths, timed build observations,
 and exact unit/entity conversion. Runtime and generic Artifact tools own no
 provider selection or game semantics. Generic Artifact handling stores the complete
-governed DTO and returns bounded observations. No dynamic routing framework,
-model fallback workflow, new storage or replay parser is introduced.
+governed DTO and returns bounded observations. Ordinary detail introduces no
+dynamic routing framework, model fallback workflow or replay parser; its separate
+heatmap extension below owns the explicitly bounded image store.
 
 One entity Catalog and one versioned local unit mapping are pinned per operation.
 Exact ID/key conversion precedes public validation; missing names do not erase
@@ -145,8 +146,8 @@ have newer source evidence; enabling those target mappings still requires code
 and tests. Exact terminal income for a precise net-worth gap remains unverified.
 Frontend and a background League index are outside the implemented change.
 
-The next accepted extension is [the default report and heatmap contract](agent/game_detail_report.md),
-not yet implemented. The capability constructs deterministic report views from
+The implemented extension follows [the default report and heatmap contract](agent/game_detail_report.md).
+The capability constructs deterministic report views from
 its governed DTO; generic Runtime/Artifact tools do not become report builders.
 Default reports bind player/time/metric facts before the model analyses them,
 while complete governed detail remains inspectable for follow-ups.
@@ -156,9 +157,12 @@ detail. One temporary STRATZ position read feeds a bounded background render;
 only cumulative five-minute/final PNGs and a small provenance index persist.
 The ordinary source-record and request-cache paths must never retain coordinates.
 Do not route raw position results through generic Artifact handling or Trace.
-Image failure preserves detail. Image lifecycle, authorization and entry/reference
-interfaces require an explicit implementation decision; neither the session
-Artifact store nor static entity display references supply them automatically.
+Image failure preserves detail. `game.heatmaps` starts/reads a coalesced batch,
+and an opaque expiring image route reads only completed files. A bounded file
+cache owns TTL/quota and cleanup separately from session Artifacts and static
+entity references. Single-process coordination is explicit; distributed workers
+are not claimed. The built-in verified-map registry is empty, so no unverified
+production map is substituted for the sample's 7.41e map.
 This needs no universal job framework, provider router or model code executor.
 
 The optional web-search integration is initialized asynchronously in the API

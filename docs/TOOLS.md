@@ -64,6 +64,7 @@ web.search                 # when Tavily MCP is enabled and discovery succeeds
 player.profile             # when a STRATZ token is configured
 player.recent_games        # when a STRATZ token is configured
 game.detail                # when a STRATZ token is configured; OpenDota supplements optional
+game.heatmaps              # when a STRATZ token is configured; calibrated map required for images
 esports.game.resolve       # when game resolution and its required providers are enabled
 ```
 
@@ -692,19 +693,24 @@ in addition to the reused OpenDota read. Deterministic boundaries and limited li
 checks are described in [EVALS](EVALS.md); [source facts](reference/stratz-game-detail.md)
 do not guarantee universal Provider coverage.
 
-The accepted [default report target](agent/game_detail_report.md) is not yet a
-new registered tool or implemented `game.detail` return shape. It extends the
+The implemented [default report](agent/game_detail_report.md) is the outer
+`GameDetailResult.report`, alongside `data`. It extends the
 governed DTO for deterministic minute/final/interaction/event views; the model
 reads prepared records and can query full governed detail for follow-ups.
 The target uses source-attributed final GPM-derived income, minute level,
 observed equipment/status, separate support counts and damage scopes; incomplete
 assists remain unknown. It does not expose providers or raw detail to the model.
 
-Heatmaps are separately requested, background-generated cumulative five-minute
-and terminal images, not a prerequisite for ordinary detail. Only generated
-images and a small index may be exposed; never raw positions. Their invocation
-and image-reference interface still require an implementation decision. This
-document registers no speculative tool name or new `display_ref` syntax.
+`game.heatmaps(valve_game_id, action="get", offset=0, limit=20)` separately requests
+or inspects background cumulative five-minute/final images. `get` coalesces/reuses,
+`retry` explicitly regenerates a finished batch and `cancel` stops it. Pages have
+at most 30 images and `next_offset`; do not repeatedly poll inside one answer.
+The tool can read a remote source and remains execution-only, unlike Artifact
+reads. Only PNG references and a small index are exposed; never raw positions.
+Opaque expiring bearer references serve public-game images through a read-only
+route, without new entity `display_ref` syntax. No calibrated production map is
+bundled yet: `unavailable/map_not_calibrated_for_game_version` is a valid result,
+not permission to render a placeholder or substitute another version's map.
 Generic Artifact read/grep/query and their stage/byte bounds stay unchanged.
 
 `catalog.lookup(kind, ids)` resolves up to 20 exact positive hero or item IDs
