@@ -13,6 +13,7 @@ from app.vnext.tools.errors import StructuredToolError
 
 from .detail import GameDetailInput, GameDetailResult, SourceRead
 from .projection import project_detail
+from .report import build_game_report
 
 
 class GameDetailService:
@@ -66,6 +67,13 @@ class GameDetailService:
         sources = {"stratz": SourceRead(retrieved_at=record.retrieved_at)}
         if supplement is not None:
             sources["opendota"] = SourceRead(retrieved_at=supplement.retrieved_at)
+        data = project_detail(
+            record,
+            supplement,
+            entities=entities,
+            units=self._units,
+            supplement_error=error_code,
+        )
         return GameDetailResult(
             valve_game_id=record.match_id,
             provider=record.provider,
@@ -73,11 +81,6 @@ class GameDetailService:
             sources=sources,
             catalog_version=entities.catalog_version,
             unit_mapping_version=self._units.version,
-            data=project_detail(
-                record,
-                supplement,
-                entities=entities,
-                units=self._units,
-                supplement_error=error_code,
-            ),
+            data=data,
+            report=build_game_report(data),
         )

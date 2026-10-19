@@ -465,8 +465,32 @@ def project_stratz_detail(
         event = ObjectiveEvent(
             time_seconds=row.get("time"), type=kind, source_paths=source_path(f"chatEvents[{i}]")
         )
+        if kind == "tormentor_kill" and row.get("time") is not None:
+            candidates = [p for p in players or [] if p.get("heroId") == row.get("fromHeroId")]
+            if len(candidates) == 1:
+                owner = candidates[0]
+                owner_index = next(k for k, p in enumerate(players) if p is owner)
+                buffs = (owner.get("stats") or {}).get("matchPlayerBuffEvent") or []
+                linked = [
+                    (j, b)
+                    for j, b in enumerate(buffs)
+                    if b.get("time") == row["time"] and b.get("itemId") == 609
+                ]
+                if len(linked) == 1:
+                    event.reward_player_slot = owner.get("playerSlot")
+                    raw = f"players[{owner_index}].stats.matchPlayerBuffEvent[{linked[0][0]}]"
+                    event.reward_item = entities.by_id(
+                        609,
+                        "item",
+                        "events.other_objectives.reward_item",
+                        f"{raw}.itemId",
+                        coverage,
+                    )
+                    event.source_paths += source_path(raw)
         (first if kind == "first_blood" else objectives).append(event)
         for key in ("fromHeroId", "toHeroId", "value", "isRadiant"):
+            if key == "fromHeroId" and event.reward_player_slot is not None:
+                continue
             if row.get(key) is not None:
                 _missing(
                     coverage,

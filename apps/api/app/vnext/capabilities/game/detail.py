@@ -18,6 +18,7 @@ from pydantic import (
 from app.vnext.catalog import EntityNameCatalogVersion
 
 from .data import GameDetailData, Provider
+from .report import GameReport
 
 
 class GameDetailInput(BaseModel):
@@ -58,6 +59,7 @@ class GameDetailResult(BaseModel):
     catalog_version: EntityNameCatalogVersion
     unit_mapping_version: StrictStr = Field(min_length=1)
     data: GameDetailData = Field(description="Eight governed sections; no raw provider object.")
+    report: GameReport | None = Field(default=None, description="Prepared default data views.")
 
     @model_validator(mode="after")
     def consistent_provenance(self) -> GameDetailResult:

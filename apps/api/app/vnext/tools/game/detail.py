@@ -33,6 +33,16 @@ provider identifies the primary source; sources, coverage.groups and event
 source_paths attribute the actual facts and retrieval times. You do not need
 another Provider lookup to fill these predefined supplemental groups.
 Label-resource versions are separate from match-source provenance.
+Also returns a program-prepared report. Prefer report.minute_snapshots for minute
+ten-player comparisons, report.final_players for final statistics, report.damage_matrix
+for attacker-to-target hero damage, and report.events for confirmed event facts.
+Query minute_snapshots by time_seconds; each record includes player identities.
+Read data for deeper source-backed follow-ups and coverage for limitations.
+The report shows level instead of raw XP; unknown minute assists stay null.
+Final cumulative_gold_earned is floor(GPM * formal duration / 60), a derived value;
+death_gold_lost is complete explicit death loss, known_death_gold_lost a partial
+subtotal. Neither is the earned-income/net-worth gap. Damage matrix cells do not
+have to sum to final hero_damage. Inventory observations retain their actual times.
 data.match.match_date is the Beijing calendar date (Asia/Shanghai), so it may differ
 from a source UTC date. data.match.score contains Radiant/Dire hero-kill counts, not
 series game wins. data.economy.minute_timeline contains records with time_seconds,

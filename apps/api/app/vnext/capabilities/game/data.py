@@ -384,6 +384,8 @@ class ObjectiveEvent(_SourcedEvent):
     actor_unit: UnitData | None = None
     player_slot: StrictInt | None = None
     victim_player_slot: StrictInt | None = None
+    reward_player_slot: StrictInt | None = None
+    reward_item: EntityData | None = None
 
 
 class FirstBloodData(_Data):
