@@ -197,12 +197,20 @@ class MinuteData(_TimedData):
     denies: Number | None = None
     kills: StrictInt | None = None
     known_deaths: StrictInt | None = None
+    assists: StrictInt | None = None
+    level: StrictInt | None = None
+    level_observed_at_seconds: Number | None = None
+
+
+class LevelEvent(_TimedData):
+    level: StrictInt | None = Field(default=None, ge=1)
 
 
 class PlayerData(_Data):
     identity: PlayerIdentity
     final_stats: FinalStats
     minute_timeline: list[MinuteData] | None = None
+    level_events: list[LevelEvent] | None = None
 
 
 class EconomyMinute(_TimedData):
@@ -223,6 +231,9 @@ class FinalLoadout(_Data):
     aghanims_scepter: Number | None = None
     aghanims_shard: Number | None = None
     moonshard: Number | None = None
+    has_consumed_scepter: StrictBool | None = None
+    has_shard: StrictBool | None = None
+    has_consumed_moon_shard: StrictBool | None = None
 
 
 class PurchaseEvent(_TimedData):
@@ -249,6 +260,14 @@ class InventoryEvent(_TimedData):
 class AbilityUpgradeEvent(_TimedData):
     ability: EntityData | None = None
     level: StrictInt | None = None
+    is_talent: StrictBool | None = None
+    is_ultimate: StrictBool | None = None
+
+
+class PermanentUpgradeEvent(_TimedData):
+    upgrade: Literal["consumed_scepter", "shard", "consumed_moon_shard"]
+    item: EntityData | None = None
+    stack_count: StrictInt | None = None
 
 
 class PlayerBuild(_Data):
@@ -258,6 +277,7 @@ class PlayerBuild(_Data):
     inventory_events: list[InventoryEvent] | None = None
     ability_upgrade_events: list[AbilityUpgradeEvent] | None = None
     neutral_item_history: list[NeutralItemEvent] | None = None
+    permanent_upgrade_events: list[PermanentUpgradeEvent] | None = None
 
 
 class BuildsData(_Data):

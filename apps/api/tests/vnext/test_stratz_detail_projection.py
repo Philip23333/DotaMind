@@ -161,7 +161,7 @@ def test_builds_use_observed_inventory_and_timed_upgrades_not_purchase_reconstru
         build.inventory_events[0].time_seconds == raw["playbackData"]["inventoryEvents"][0]["time"]
     )
     assert build.ability_upgrade_events[0].time_seconds == -89
-    assert build.ability_upgrade_events[0].level is None
+    assert build.ability_upgrade_events[0].level == 1
     assert build.ability_upgrade_events[0].ability.id == 5028
     assert len(build.final_loadout.inventory) == 6
 

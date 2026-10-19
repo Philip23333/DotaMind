@@ -43,13 +43,15 @@ query GameDetail($id: Long!) {
       backpack0Id backpack1Id backpack2Id neutral0Id
       stats {
         itemPurchases { time itemId }
+        matchPlayerBuffEvent { time itemId abilityId stackCount }
         heroDamageReport { dealtTargets { target amount } }
       }
       playbackData {
         goldEvents { time amount reason isValidForStats }
         deathEvents { time attacker target goldFed goldLost timeDead }
         buyBackEvents { time }
-        abilityLearnEvents { time abilityId level levelObtained }
+        abilityLearnEvents { time abilityId level levelObtained isTalent isUltimate }
+        playerUpdateLevelEvents { time level }
         inventoryEvents {
           time
           item0 { itemId charges } item1 { itemId charges } item2 { itemId charges }
@@ -231,6 +233,13 @@ class StratzGameDetailAdapter:
                     raise _schema_error(path)
                 event_types = {
                     "itemPurchases": {"time": int, "itemId": int},
+                    "matchPlayerBuffEvent": {
+                        "time": int,
+                        "itemId": int,
+                        "abilityId": int,
+                        "stackCount": int,
+                    },
+                    "playerUpdateLevelEvents": {"time": int, "level": int},
                     "goldEvents": {
                         "time": int,
                         "amount": int,
@@ -247,6 +256,8 @@ class StratzGameDetailAdapter:
                         "abilityId": int,
                         "level": int,
                         "levelObtained": int,
+                        "isTalent": bool,
+                        "isUltimate": bool,
                     },
                     "inventoryEvents": {"time": int},
                 }

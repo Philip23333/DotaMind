@@ -7,7 +7,6 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app.vnext.capabilities.game.data import (
-    AbilityUpgradeEvent,
     BuildsData,
     BuybackEvent,
     CoverageData,
@@ -41,6 +40,7 @@ from app.vnext.capabilities.game.data import (
 from app.vnext.providers.opendota.detail_entities import DetailEntities
 from app.vnext.providers.opendota.detail_values import ABSENT, _missing, _rows
 
+from .detail_states import ability_events, level_events, permanent_events
 from .game_detail import StratzGameRecord
 
 
@@ -187,30 +187,16 @@ def _build(player, i, entities, coverage):
             for j, row in enumerate(purchases)
         ]
     )
-    upgrades = _rows(playback.get("abilityLearnEvents"), f"{path}.ability_upgrade_events", coverage)
-    upgrade_events = (
-        None
-        if upgrades is None
-        else [
-            AbilityUpgradeEvent(
-                time_seconds=row.get("time"),
-                ability=entities.by_id(
-                    row.get("abilityId", ABSENT),
-                    "ability",
-                    f"{path}.ability_upgrade_events[{j}].ability",
-                    f"players[{i}].playbackData.abilityLearnEvents[{j}].abilityId",
-                    coverage,
-                ),
-            )
-            for j, row in enumerate(upgrades)
-        ]
-    )
-    if upgrades:
-        _missing(
-            coverage,
-            f"{path}.ability_upgrade_events.level",
-            "STRATZ upgrade level encoding is not yet verified; no hero level inferred",
-        )
+    upgrade_events = ability_events(player, i, entities, coverage)
+    buffs = permanent_events(player, i, entities, coverage)
+    loadout = _loadout(player, i, entities, coverage)
+    for buff, field in (
+        ("consumed_scepter", "has_consumed_scepter"),
+        ("shard", "has_shard"),
+        ("consumed_moon_shard", "has_consumed_moon_shard"),
+    ):
+        if any(e.upgrade == buff for e in buffs or []):
+            setattr(loadout, field, True)
     for field, raw, value in (
         ("inventory_events", "playbackData.inventoryEvents", snapshots),
         ("purchase_events", "stats.itemPurchases", purchase_events),
@@ -228,10 +214,11 @@ def _build(player, i, entities, coverage):
         _group(coverage, f"{path}.final_loadout.{field}", f"players[{i}]", player)
     return PlayerBuild(
         player_slot=player.get("playerSlot"),
-        final_loadout=_loadout(player, i, entities, coverage),
+        final_loadout=loadout,
         inventory_events=snapshots,
         purchase_events=purchase_events,
         ability_upgrade_events=upgrade_events,
+        permanent_upgrade_events=buffs,
     )
 
 
@@ -365,6 +352,7 @@ def project_stratz_detail(
                         }.items()
                     }
                 ),
+                level_events=level_events(p, i, coverage),
             )
         )
         _missing(

@@ -228,6 +228,16 @@ def project_detail(
                     f"{raw}.{key}",
                     getattr(build.final_loadout, key),
                 )
+            for field, key in (
+                ("has_consumed_scepter", "aghanims_scepter"),
+                ("has_shard", "aghanims_shard"),
+                ("has_consumed_moon_shard", "moonshard"),
+            ):
+                value = getattr(build.final_loadout, key)
+                if getattr(build.final_loadout, field) is None and type(value) in (int, float):
+                    if value in (0, 1):
+                        setattr(build.final_loadout, field, bool(value))
+                        group(f"builds.players[{i}].final_loadout.{field}", f"{raw}.{key}", value)
             build.neutral_item_history = deepcopy(old_build.neutral_item_history)
             used_prefixes.add(f"builds.players[{j}].neutral_item_history")
             group(
@@ -302,6 +312,18 @@ def project_detail(
                 None,
                 reason="No uniquely associated supplemental player",
             )
+        for node in player.minute_timeline or []:
+            observed = [
+                e
+                for e in player.level_events or []
+                if e.time_seconds is not None and e.time_seconds <= node.time_seconds
+            ]
+            if observed:
+                latest = max(e.time_seconds for e in observed)
+                levels = {e.level for e in observed if e.time_seconds == latest}
+                if len(levels) == 1:
+                    node.level = levels.pop()
+                    node.level_observed_at_seconds = latest
 
     # Copy only gaps for selected groups; source indices in evidence remain untouched.
     if extra:
