@@ -31,13 +31,14 @@ GAME_DETAIL_QUERY = """\
 query GameDetail($id: Long!) {
   match(id: $id) {
     id startDateTime durationSeconds didRadiantWin gameVersionId firstBloodTime
-    radiantTeamId direTeamId
+    radiantTeamId direTeamId radiantKills direKills
     radiantTeam { id name } direTeam { id name }
     pickBans { order isPick heroId bannedHeroId isRadiant }
     chatEvents { time type fromHeroId toHeroId value isRadiant }
     players {
       steamAccountId playerSlot heroId isRadiant
       kills deaths assists level numLastHits numDenies heroDamage towerDamage heroHealing networth
+      goldPerMinute experiencePerMinute
       item0Id item1Id item2Id item3Id item4Id item5Id
       backpack0Id backpack1Id backpack2Id neutral0Id
       stats {
@@ -149,6 +150,13 @@ class StratzGameDetailAdapter:
                 raise _schema_error("data.match.startDateTime") from None
         _typed(match, "didRadiantWin", bool, "data.match")
         for side in ("radiant", "dire"):
+            values = match.get(f"{side}Kills")
+            if values is not None and (
+                not isinstance(values, list)
+                or any(type(value) is not int or value < 0 for value in values)
+            ):
+                raise _schema_error(f"data.match.{side}Kills")
+        for side in ("radiant", "dire"):
             team = match.get(f"{side}Team")
             if team is not None:
                 if not isinstance(team, dict):
@@ -203,6 +211,8 @@ class StratzGameDetailAdapter:
                         "towerDamage",
                         "heroHealing",
                         "networth",
+                        "goldPerMinute",
+                        "experiencePerMinute",
                         "neutral0Id",
                     )
                 },

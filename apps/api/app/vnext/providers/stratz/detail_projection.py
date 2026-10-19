@@ -357,6 +357,8 @@ def project_stratz_detail(
                             "level": "level",
                             "last_hits": "numLastHits",
                             "denies": "numDenies",
+                            "gold_per_minute": "goldPerMinute",
+                            "experience_per_minute": "experiencePerMinute",
                             "hero_damage": "heroDamage",
                             "tower_damage": "towerDamage",
                             "hero_healing": "heroHealing",
@@ -507,7 +509,15 @@ def project_stratz_detail(
             duration_seconds=source.get("durationSeconds"),
             game_winner=_side(source.get("didRadiantWin")),
             teams=TeamsData(**teams),
-            score=ScoreData(),
+            score=ScoreData(
+                **{
+                    side: sum(values)
+                    if isinstance(values := source.get(f"{side}Kills"), list)
+                    and all(type(v) is int and v >= 0 for v in values)
+                    else None
+                    for side in ("radiant", "dire")
+                }
+            ),
         ),
         draft=_draft(source, entities, coverage),
         players=rows,

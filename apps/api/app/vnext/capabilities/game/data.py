@@ -177,6 +177,12 @@ class FinalStats(_Data):
     level: StrictInt | None = None
     last_hits: StrictInt | None = None
     denies: StrictInt | None = None
+    cumulative_gold_earned: StrictInt | None = Field(default=None, ge=0)
+    gold_per_minute: StrictInt | None = Field(default=None, ge=0)
+    experience_per_minute: StrictInt | None = Field(default=None, ge=0)
+    death_gold_lost: Number | None = Field(default=None, ge=0)
+    known_death_gold_lost: Number | None = Field(default=None, ge=0)
+    death_gold_lost_count: StrictInt | None = Field(default=None, ge=0)
     earned_gold_net_worth_gap: Number | None = None
     hero_damage: Number | None = None
     tower_damage: Number | None = None

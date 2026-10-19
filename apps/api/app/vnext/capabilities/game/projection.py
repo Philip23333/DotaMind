@@ -14,6 +14,7 @@ from app.vnext.providers.stratz.game_detail import StratzGameRecord
 
 from .data import CoverageGroup, HeroDeath, MissingData, SourcePath, TargetValue
 from .death_coverage import apply_death_coverage
+from .statistics import apply_final_statistics
 
 
 def _association(player, candidates):
@@ -153,18 +154,25 @@ def project_detail(
         )
 
     if extra:
-        data.match.score = deepcopy(extra.match.score)
         data.economy = deepcopy(extra.economy)
-    score_available = extra is not None and any(
-        value is not None for value in (data.match.score.radiant, data.match.score.dire)
-    )
-    group("match.score", "radiant_score", data.match.score if score_available else None)
+    for side in ("radiant", "dire"):
+        if getattr(data.match.score, side) is not None:
+            coverage.groups.append(
+                CoverageGroup(
+                    path=f"match.score.{side}",
+                    status="available",
+                    source_paths=[SourcePath(source="stratz", path=f"{side}Kills")],
+                    reason="Sum of source kill buckets, not the last bucket or player kill totals",
+                )
+            )
+        else:
+            value = getattr(extra.match.score, side) if extra else None
+            setattr(data.match.score, side, value)
+            group(f"match.score.{side}", f"{side}_score", value)
     group(
         "economy",
         "radiant_gold_adv",
-        data.economy
-        if extra is not None and data.economy.minute_timeline is not None
-        else None,
+        data.economy if extra is not None and data.economy.minute_timeline is not None else None,
         partial=any(
             node.radiant_gold_adv is None or node.radiant_xp_adv is None
             for node in data.economy.minute_timeline or []
@@ -318,6 +326,7 @@ def project_detail(
         _supplement_kill_deaths(data, supplement, remapping, available_slots, entities)
     coverage.death_counts.clear()
     apply_death_coverage(data, available_slots, provider="stratz")
+    apply_final_statistics(data, primary, available_slots)
     if supplement is not None:
         for old, new in remapping.items():
             if not coverage.death_counts[new].unaccounted_deaths:
