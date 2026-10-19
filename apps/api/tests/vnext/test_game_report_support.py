@@ -13,7 +13,7 @@ def test_dispenser_use_is_not_a_placed_observer_or_sentry():
     assert [(e.item.id, e.action, e.time_seconds) for e in events if e.action == "used"] == [
         (218, "used", 100)
     ]
-    assert not any(e.action == "placed" for e in events)
+    assert not any(e.action == "ward_placed" for e in events)
     assert not any(e.action == "used" and e.item.id in (42, 43) for e in events)
 
 
@@ -26,10 +26,10 @@ def test_empty_stratz_ward_groups_use_same_game_opendota_without_expiry_as_kill(
     data = project(record, extra)
     for i, player in enumerate(data.players):
         raw = extra.data["players"][i]
-        placed = [e for e in player.support.events if e.action == "placed"]
+        placed = [e for e in player.support.events if e.action == "ward_placed"]
         assert len(placed) == len(raw.get("obs_log") or []) + len(raw.get("sen_log") or [])
         assert all(e.source_paths[0].source == "opendota" for e in placed)
-        assert not any(e.action == "destroyed" for e in player.support.events)
+        assert not any(e.action == "ward_killed_by_player" for e in player.support.events)
 
 
 def test_received_damage_retains_attacker_identity_without_forcing_root_total():

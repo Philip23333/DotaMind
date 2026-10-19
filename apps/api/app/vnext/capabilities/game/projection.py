@@ -325,6 +325,9 @@ def project_detail(
                 if len(levels) == 1:
                     node.level = levels.pop()
                     node.level_observed_at_seconds = latest
+                    node.level_observed_at_label = next(
+                        e.time_label for e in observed if e.time_seconds == latest
+                    )
 
     # Copy only gaps for selected groups; source indices in evidence remain untouched.
     if extra:

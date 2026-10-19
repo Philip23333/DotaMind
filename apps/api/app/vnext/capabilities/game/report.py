@@ -48,6 +48,7 @@ class MinutePlayer(_Data):
     cumulative_gold_earned: Number | None = None
     level: int | None = None
     level_observed_at_seconds: Number | None = None
+    level_observed_at_label: str | None = None
     known_kills: int | None = None
     known_deaths: int | None = None
     assists: int | None = None
@@ -112,9 +113,10 @@ class GameReport(_Data):
     limitations: list[str] = Field(
         default_factory=lambda: [
             "Minute K/D are known event counts; minute assists remain unknown.",
-            "Inventory and level are latest explicit observations, not exact minute frames.",
+            "Minute states use latest observations; final_loadout uses explicit final fields.",
             "Final earned income is floor(GPM * formal duration / 60); not an exact final counter.",
             "Hero damage total and per-target damage have separate source scopes.",
+            "Death loss sums known amounts even for unknown-time deaths; not a timed-death total.",
         ]
     )
 
@@ -184,6 +186,7 @@ def _minute_player(data, player, boundary):
         cumulative_gold_earned=node.cumulative_gold_earned if node else None,
         level=level.level if level else None,
         level_observed_at_seconds=level.time_seconds if level else None,
+        level_observed_at_label=level.time_label if level else None,
         known_kills=sum(
             e.killer_player_slot == slot
             for e in deaths

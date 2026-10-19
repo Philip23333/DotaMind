@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from app.integrations.valve.catalog_repository import DotaCatalogRepository
 from app.vnext.capabilities.game import GameDetailInput, GameDetailResult
+from app.vnext.capabilities.game.report import build_game_report
 from app.vnext.capabilities.player import PlayerRecentGame, PlayerRecentGamesResult
 from app.vnext.catalog import EntityNameResolver, UnitCatalog
 from tests.vnext.test_game_detail_projection import project, record, source
@@ -31,6 +32,7 @@ def test_game_detail_requires_closed_governed_data_and_unique_label_versions() -
         "unit_mapping_version": UnitCatalog.load_default().version,
         "data": project(record(source(match_id=12345))),
     }
+    arguments["report"] = build_game_report(arguments["data"])
     result = GameDetailResult(**arguments)
     assert set(result.data.model_dump()) == {
         "match", "draft", "players", "economy", "builds", "events", "interactions", "coverage",
@@ -38,7 +40,7 @@ def test_game_detail_requires_closed_governed_data_and_unique_label_versions() -
     for data in ({}, {"match_id": 12345, "players": []}, {"raw": {"source": True}}):
         with pytest.raises(ValidationError):
             GameDetailResult(**{**arguments, "data": data})
-    for key in ("catalog_version", "unit_mapping_version"):
+    for key in ("catalog_version", "unit_mapping_version", "report"):
         with pytest.raises(ValidationError):
             GameDetailResult(**{k: v for k, v in arguments.items() if k != key})
     with pytest.raises(ValidationError, match="timezone"):

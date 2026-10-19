@@ -160,12 +160,14 @@ class GameHeatmapService:
                         self._save(batch)
             if batch is None or retry:
                 if self._closed:
-                    raise StructuredToolError("provider_error", "Heatmap service is closed", {})
+                    raise StructuredToolError(
+                        "tool_execution_error", "Heatmap service is closed", {}
+                    )
                 if (
                     sum(b.task is not None and not b.task.done() for b in self._batches.values())
                     >= self.settings.max_jobs
                 ):
-                    raise StructuredToolError("provider_error", "Heatmap queue is full", {})
+                    raise StructuredToolError("tool_execution_error", "Heatmap queue is full", {})
                 if batch is not None:
                     self._delete(self._folder(batch.index.batch_id))
                 token = uuid4().hex
@@ -209,15 +211,8 @@ class GameHeatmapService:
                     with self._lock:
                         if batch.stop.is_set():
                             return
-                        self._cleanup(required_bytes=len(png))
-                        size = sum(
-                            p.stat().st_size for p in self._root().glob("*/*") if p.is_file()
-                        )
-                        if size + len(png) > self.settings.max_bytes:
-                            raise HeatmapUnavailable("image_quota_exceeded")
                         slot = player["playerSlot"]
                         path = self._folder(index.batch_id) / f"{slot}-{cutoff}.png"
-                        path.write_bytes(png)
                         hero = entities.by_id(
                             player.get("heroId"),
                             "hero",
@@ -226,20 +221,38 @@ class GameHeatmapService:
                             labels,
                             required=False,
                         )
-                        index.images.append(
-                            HeatmapImage(
-                                player_slot=slot,
-                                account_id=player.get("steamAccountId"),
-                                hero=hero,
-                                time_seconds=cutoff,
-                                image_ref=f"/api/v1/game/heatmaps/assets/{index.batch_id}/{slot}/{cutoff}.png",
-                                sha256=hashlib.sha256(png).hexdigest(),
-                                bytes=len(png),
-                                sample_count=count,
-                            )
+                        image = HeatmapImage(
+                            player_slot=slot,
+                            account_id=player.get("steamAccountId"),
+                            hero=hero,
+                            time_seconds=cutoff,
+                            image_ref=f"/api/v1/game/heatmaps/assets/{index.batch_id}/{slot}/{cutoff}.png",
+                            sha256=hashlib.sha256(png).hexdigest(),
+                            bytes=len(png),
+                            sample_count=count,
                         )
+                        candidate = index.model_copy(deep=True)
+                        candidate.images.append(image)
+                        candidate.total_images = len(candidate.images)
+                        old_size = (path.parent / "index.json").stat().st_size
+                        growth = max(0, len(candidate.model_dump_json().encode()) - old_size)
+                        required = len(png) + growth
+                        self._cleanup(required_bytes=required)
+                        size = sum(
+                            p.stat().st_size for p in self._root().glob("*/*") if p.is_file()
+                        )
+                        if size + required > self.settings.max_bytes:
+                            raise HeatmapUnavailable("image_quota_exceeded")
+                        path.write_bytes(png)
+                        index.images.append(image)
                         index.total_images = len(index.images)
-                        self._save(batch)
+                        try:
+                            self._save(batch)
+                        except OSError:
+                            index.images.pop()
+                            index.total_images = len(index.images)
+                            path.unlink(missing_ok=True)
+                            raise
 
                 async def consume(frame, retrieved):
                     index.retrieved_at = retrieved
@@ -275,7 +288,11 @@ class GameHeatmapService:
             index.reason = "heatmap_generation_failed"
         finally:
             with self._lock:
-                self._save(batch)
+                try:
+                    self._save(batch)
+                except OSError:
+                    index.status = "partial" if index.images else "failed"
+                    index.reason = "heatmap_storage_failed"
 
     def read_image(self, token, slot, cutoff):
         with self._lock:

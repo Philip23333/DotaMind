@@ -200,13 +200,19 @@ class MinuteData(_TimedData):
     assists: StrictInt | None = None
     level: StrictInt | None = None
     level_observed_at_seconds: Number | None = None
+    level_observed_at_label: StrictStr | None = Field(default=None, validate_default=True)
+
+    @field_validator("level_observed_at_label")
+    @classmethod
+    def derive_observed_label(cls, label, info: ValidationInfo):
+        return _checked_time_label(info.data.get("level_observed_at_seconds"), label)
 
 
 class LevelEvent(_TimedData):
     level: StrictInt | None = Field(default=None, ge=1)
 
 
-SupportAction = Literal["used", "placed", "destroyed", "purchase_record"]
+SupportAction = Literal["used", "ward_placed", "ward_killed_by_player", "purchase_record"]
 
 
 class SupportEvent(_TimedData):

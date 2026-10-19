@@ -58,8 +58,8 @@ class GameDetailResult(BaseModel):
     sources: dict[Provider, SourceRead]
     catalog_version: EntityNameCatalogVersion
     unit_mapping_version: StrictStr = Field(min_length=1)
+    report: GameReport = Field(description="Required prepared default data views.")
     data: GameDetailData = Field(description="Eight governed sections; no raw provider object.")
-    report: GameReport | None = Field(default=None, description="Prepared default data views.")
 
     @model_validator(mode="after")
     def consistent_provenance(self) -> GameDetailResult:

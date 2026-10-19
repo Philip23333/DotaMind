@@ -22,6 +22,10 @@ def test_saved_game_minutes_remain_distinct_from_final_statistics() -> None:
         "denies": 2,
         "kills": 1,
         "known_deaths": 0,
+        "assists": None,
+        "level": None,
+        "level_observed_at_seconds": None,
+        "level_observed_at_label": None,
     }
     assert p.minute_timeline[-1].time_seconds == 2880
     assert data.match.duration_seconds == 2904
@@ -112,9 +116,7 @@ def test_team_metric_gaps_do_not_shift_time_or_discard_valid_experience(gold) ->
     assert [n.radiant_xp_adv for n in nodes] == [100, -81]
     expected_gold = [367, None] if gold == [367, True] else [None, None]
     assert [n.radiant_gold_adv for n in nodes] == expected_gold
-    assert any(
-        m.path == "economy.minute_timeline.radiant_gold_adv" for m in data.coverage.missing
-    )
+    assert any(m.path == "economy.minute_timeline.radiant_gold_adv" for m in data.coverage.missing)
     assert raw == original
 
 
@@ -134,8 +136,11 @@ def test_unknown_time_deaths_keep_final_total_and_do_not_erase_known_curve():
     assert data.players[0].final_stats.deaths == 3
     assert [n.known_deaths for n in data.players[0].minute_timeline] == [0, 1]
     counts = data.coverage.death_counts[0]
-    assert (counts.known_time_deaths, counts.unknown_time_deaths,
-            counts.unaccounted_deaths) == (1, 1, 1)
+    assert (counts.known_time_deaths, counts.unknown_time_deaths, counts.unaccounted_deaths) == (
+        1,
+        1,
+        1,
+    )
     assert len(data.events.hero_deaths) == 2
     assert data.events.hero_deaths[0].source_paths[0].source == "opendota"
 

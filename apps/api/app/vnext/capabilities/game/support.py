@@ -2,7 +2,15 @@
 
 from collections import Counter
 
-from .data import CoverageGroup, PlayerSupport, SourcePath, SupportCount, SupportEvent
+from .data import (
+    CoverageData,
+    CoverageGroup,
+    MissingData,
+    PlayerSupport,
+    SourcePath,
+    SupportCount,
+    SupportEvent,
+)
 
 SUPPORT_ITEMS = {30, 40, 42, 43, 188, 218}
 WARD_KEYS = {
@@ -27,9 +35,15 @@ def apply_support(data, primary, supplement, associations, entities):
         result = PlayerSupport()
 
         def entity(item, i=i):
-            return entities.by_id(
-                item, "item", f"players[{i}].support", "support item identity", data.coverage
+            labels = CoverageData()
+            result = entities.by_id(
+                item, "item", f"players[{i}].support", "static_support_item", labels
             )
+            # Category IDs are fixed canonical facts, not an invented source scalar.
+            data.coverage.missing.extend(
+                MissingData(path=gap.path, reason=gap.reason) for gap in labels.missing
+            )
+            return result
 
         def event(item, action, row, source, path, result=result, entity=entity):
             if item not in SUPPORT_ITEMS:
@@ -80,23 +94,29 @@ def apply_support(data, primary, supplement, associations, entities):
         if has_stratz_wards["wards"]:
             for j, row in enumerate(stats.get("wards") or []):
                 item = {0: 42, 1: 43}.get(row.get("type"))
-                event(item, "placed", row, "stratz", f"players[{i}].stats.wards[{j}]")
+                event(item, "ward_placed", row, "stratz", f"players[{i}].stats.wards[{j}]")
         else:
             for item, (key, _, _) in WARD_KEYS.items():
                 for j, row in enumerate(od.get(key) or []):
                     if isinstance(row, dict):
-                        event(item, "placed", row, "opendota", f"players[{old}].{key}[{j}]")
+                        event(item, "ward_placed", row, "opendota", f"players[{old}].{key}[{j}]")
 
         if has_stratz_wards["wardDestruction"]:
             for j, row in enumerate(stats.get("wardDestruction") or []):
                 item = (
                     42 if row.get("isWard") is True else 43 if row.get("isWard") is False else None
                 )
-                event(item, "destroyed", row, "stratz", f"players[{i}].stats.wardDestruction[{j}]")
+                event(
+                    item,
+                    "ward_killed_by_player",
+                    row,
+                    "stratz",
+                    f"players[{i}].stats.wardDestruction[{j}]",
+                )
         for item, (_, placed_key, destroyed_key) in WARD_KEYS.items():
             for action, key, category in (
-                ("placed", placed_key, "wards"),
-                ("destroyed", destroyed_key, "wardDestruction"),
+                ("ward_placed", placed_key, "wards"),
+                ("ward_killed_by_player", destroyed_key, "wardDestruction"),
             ):
                 value = od.get(key)
                 if not has_stratz_wards[category] and type(value) is int and value >= 0:

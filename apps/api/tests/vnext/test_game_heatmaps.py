@@ -214,3 +214,30 @@ def test_adapter_uses_no_source_cache_and_clears_transient_response():
         assert c.payload == {}
 
     asyncio.run(run())
+
+
+def test_failed_index_write_does_not_publish_an_unreadable_image(tmp_path):
+    async def run():
+        service = GameHeatmapService(
+            Provider(), settings(tmp_path), DotaCatalogRepository.load_default
+        )
+        save = service._save
+        calls = 0
+
+        def fail_on_image(batch):
+            nonlocal calls
+            calls += 1
+            if calls >= 3:
+                raise OSError("test storage failure")
+            save(batch)
+
+        service._save = fail_on_image
+        await service.get(HeatmapInput(valve_game_id=8960991322))
+        batch = service._batches[8960991322]
+        await batch.task
+        assert batch.index.status == "failed" and batch.index.reason == "heatmap_storage_failed"
+        assert batch.index.images == []
+        assert service.read_image(batch.index.batch_id, 0, 300) is None
+        await service.aclose()
+
+    asyncio.run(run())

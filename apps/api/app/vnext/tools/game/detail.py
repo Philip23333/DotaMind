@@ -24,7 +24,16 @@ these warnings do not prohibit this lookup. This tool returns facts for the
 requested Valve ID and does not independently verify its esports association.
 Preserve material association uncertainty when interpreting or reporting facts.
 
-Returns eight governed sections: match, draft, players, economy, builds,
+The default answer data is report, a program-prepared set of views:
+report.minute_snapshots binds all ten players' metrics and observed states at each
+time_seconds; report.final_players is the final table; report.damage_matrix binds
+attackers to targets; report.events contains confirmed event facts. Use these views
+for default comparisons. For a player's state at 30:00, select the report snapshot
+whose time_seconds is 1800; its inventory_observation already selects only source
+observations at or before that boundary. A later observation is future data,
+even if closer in seconds. Use data for deeper follow-ups beyond the report views.
+
+data contains eight governed sections: match, draft, players, economy, builds,
 events, interactions, and coverage. Hero, item, ability, and event-unit objects
 include confirmed IDs where applicable and English/Chinese names from local
 catalogs; no separate Catalog call is needed just to decode these entities.
@@ -33,15 +42,18 @@ provider identifies the primary source; sources, coverage.groups and event
 source_paths attribute the actual facts and retrieval times. You do not need
 another Provider lookup to fill these predefined supplemental groups.
 Label-resource versions are separate from match-source provenance.
-Also returns a program-prepared report. Prefer report.minute_snapshots for minute
-ten-player comparisons, report.final_players for final statistics, report.damage_matrix
-for attacker-to-target hero damage, and report.events for confirmed event facts.
-Query minute_snapshots by time_seconds; each record includes player identities.
+final_loadout uses explicit final source slots, not the minute inventory observation.
+Support action ward_placed means this player placed the ward; ward_killed_by_player
+means this player destroyed a ward, not that this player's own ward was destroyed.
+purchase_record counts observed records, not item quantities. scope=known_events
+and scope=source_total have different completeness and are kept separate.
 Read data for deeper source-backed follow-ups and coverage for limitations.
 The report shows level instead of raw XP; unknown minute assists stay null.
 Final cumulative_gold_earned is floor(GPM * formal duration / 60), a derived value;
-death_gold_lost is complete explicit death loss, known_death_gold_lost a partial
-subtotal. Neither is the earned-income/net-worth gap. Damage matrix cells do not
+death_gold_lost is the program sum of all linked explicit death-loss amounts.
+known_death_gold_lost is the known-amount subtotal, including unknown-time deaths
+whose loss is known; death_gold_lost_count counts deaths with known amounts,
+not deaths with known times. Neither is the earned-income/net-worth gap. Cells do not
 have to sum to final hero_damage. Inventory observations retain their actual times.
 data.match.match_date is the Beijing calendar date (Asia/Shanghai), so it may differ
 from a source UTC date. data.match.score contains Radiant/Dire hero-kill counts, not

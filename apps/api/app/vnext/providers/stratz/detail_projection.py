@@ -426,6 +426,20 @@ def project_stratz_detail(
                 t.source_hero is None for t in interactions[-1].damage_received_by_source or []
             ),
         )
+        received_rows = [
+            (j, t)
+            for j, t in enumerate(report.get("receivedTargets") or [])
+            if t.get("amount") is not None
+        ]
+        for k, (j, target) in enumerate(received_rows):
+            if target.get("target") not in by_hero:
+                _missing(
+                    coverage,
+                    f"interactions.players[{i}].damage_received_by_source[{k}].source_hero",
+                    "Damage source namespace is not verified for this game",
+                    source_path=f"{path}.stats.heroDamageReport.receivedTargets[{j}].target",
+                    source_value=target.get("target"),
+                )
         _group(
             coverage,
             f"interactions.players[{i}].damage_by_target",

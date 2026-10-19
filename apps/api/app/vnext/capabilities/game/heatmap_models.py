@@ -47,6 +47,7 @@ class HeatmapImage(_TimedData):
     account_id: StrictInt | None = None
     hero: EntityData | None = None
     start_seconds: Literal[0] = 0
+    start_label: Literal["00:00"] = "00:00"
     time_seconds: StrictInt
     image_ref: StrictStr
     width: Literal[256] = 256
