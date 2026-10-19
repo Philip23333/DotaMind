@@ -501,13 +501,49 @@ Implemented boundaries are:
 live detail reads and four fixed-source model questions. Live latency and optional
 playback failures are concrete limits, not a claim of universal availability.
 
-Remaining source-semantic work is bounded by actual needs: verify additional
-historical NPC/event encodings, STRATZ time buckets and upgrade-level meanings,
-and a complete same-instant terminal-income source before populating those
-fields. Current implementations preserve null/partial coverage for them.
+Remaining source-semantic work is bounded by actual needs: historical NPC/event
+encodings, STRATZ time buckets and exact same-instant income for the final gap.
+New source evidence supports the separate final GPM-derived income convention,
+known zero-based skill ranks and other report inputs; these target mappings
+still need implementation and tests. Current code preserves null/partial values
+where the initial mappings cannot supply them.
 
 Frontend, background League-index backfill, replay parsing, new storage,
 deployment, and ratings/inferred analytics are outside this migration.
+
+### Default game report and image-only heatmaps (accepted; not implemented)
+
+Owner: [report contract](agent/game_detail_report.md); DTO fields remain owned by
+[game_detail_data.md](agent/game_detail_data.md). Source evidence is in the
+[reference](reference/stratz-game-detail.md), not an implementation-completion log.
+
+Implement in dependency order, keeping each code boundary and focused tests in
+its own commit:
+
+1. Extend final-stat mappings with GPM-derived earned income, GPM/XPM and
+   complete/partial explicit death-gold-loss aggregates; keep exact-gap gates.
+   Switch verified team score to STRATZ bucket sums with coverage.
+2. Add verified level/buff/skill facts and minute/report observation rules.
+   Keep known inventory times, held/consumed upgrade distinctions, unknown
+   ability IDs and incomplete minute assists explicit.
+3. Add support facts and the fixed missing-ward supplements, plus received-hero
+   damage and identity-bound matrix views. Preserve independent metric scopes;
+   one shared OpenDota response still supplies all supplements.
+4. Build deterministic default minute/final/interaction/event reports, including
+   verified Tormentor-Shard recipient associations. Keep full governed detail
+   inspectable and run real-model coverage against source and report facts.
+5. Before image implementation, settle retention/quota/cleanup, authorization
+   and invocation/reference interfaces. Then build the independently requested,
+   bounded background heatmap path: one transient position read, 256×256
+   cumulative five-minute plus final images, small provenance index and reuse.
+   No raw position persistence or generic job framework. Validate actual map
+   coordinates, failure/cancellation, duplicate work and deployed resource use.
+
+Steps are implementation boundaries, not a claim that all image-interface or
+storage settings were already chosen. Ordinary detail does not block on images;
+no frontend detail-page design, replay parsing, provider router or model code
+executor is included. Performance samples do not replace the pending acceptance
+defined in [EVALS.md](EVALS.md).
 
 ## PandaScore Match to OpenDota game identity (offline path implemented; live Agent evaluation pending)
 

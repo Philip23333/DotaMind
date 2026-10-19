@@ -139,9 +139,27 @@ remain separate from Valve hero IDs.
 
 [Source evidence](reference/stratz-game-detail.md) and [acceptance](EVALS.md)
 distinguish deterministic checks, three live detail reads, and fixed-source model
-questions. Unverified arrays, upgrade levels, complete terminal income and
-additional historical event encodings remain explicit limits. Frontend and a
-background League index are outside this change.
+questions. Unverified arrays and historical encodings remain explicit limits.
+The accepted final GPM-derived income and known zero-based skill-rank mappings
+have newer source evidence; enabling those target mappings still requires code
+and tests. Exact terminal income for a precise net-worth gap remains unverified.
+Frontend and a background League index are outside the implemented change.
+
+The next accepted extension is [the default report and heatmap contract](agent/game_detail_report.md),
+not yet implemented. The capability constructs deterministic report views from
+its governed DTO; generic Runtime/Artifact tools do not become report builders.
+Default reports bind player/time/metric facts before the model analyses them,
+while complete governed detail remains inspectable for follow-ups.
+
+Heatmaps run separately after an explicit request, without blocking ordinary
+detail. One temporary STRATZ position read feeds a bounded background render;
+only cumulative five-minute/final PNGs and a small provenance index persist.
+The ordinary source-record and request-cache paths must never retain coordinates.
+Do not route raw position results through generic Artifact handling or Trace.
+Image failure preserves detail. Image lifecycle, authorization and entry/reference
+interfaces require an explicit implementation decision; neither the session
+Artifact store nor static entity display references supply them automatically.
+This needs no universal job framework, provider router or model code executor.
 
 The optional web-search integration is initialized asynchronously in the API
 lifespan before Runtime construction. Synchronous/offline composition performs

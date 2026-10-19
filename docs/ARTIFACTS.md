@@ -14,6 +14,24 @@ nevertheless include small scalar leaves from that response. Artifacts are
 temporary session data, not domain entities, provider caches, or a durable
 evidence store.
 
+### Accepted game-report and heatmap boundary (not implemented)
+
+[The report target](agent/game_detail_report.md) prepares capability-owned
+minute/final/event views without adding game semantics to generic Artifact
+tools. Full governed DTOs and complete logical report results follow the
+existing externalization and session-ownership rules; this is not a new durable
+evidence store or a change to read/grep/query behavior.
+
+Heatmap generation has a stricter input boundary: source coordinates, trajectories
+and intermediate grids must never enter Artifacts, raw tool observations, Trace,
+logs or source caches. The capability reads them transiently and exposes only
+rendered images and a small source/time/version index. An index may be a logical
+document, but image files and their lifecycle belong to an explicitly designed
+image store, not this JSON body store. Persisting an index alone does not make
+its files available, authorized or durable. Retention, cleanup and references
+must be fixed before implementing that store; current session expiry rules
+must not be silently reused as the image lifecycle.
+
 ## Lifecycle and references
 
 In the product chat composition, each active chat session owns an in-memory

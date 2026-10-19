@@ -5,12 +5,47 @@
 This document is the sole detailed data contract for `game.detail`.
 
 - **Current implementation:** `game.detail` uses STRATZ as primary and fixed OpenDota supplements, returning the governed eight-section DTO with bilingual labels, time labels, normalized death facts, source-specific coverage, and pinned label versions.
-- **Accepted target:** keep the eight-section DTO and local bilingual labels; use STRATZ as the primary detail source and OpenDota for the fixed supplemental groups below. Clarify cumulative income, remove minute net worth, and organize verified death facts once before minute aggregation.
+- **Accepted target:** retain the eight-section DTO, bilingual labels and STRATZ-first/fixed-OpenDota boundary; extend its verified facts for a program-built default report. The accepted additions and image-only heatmaps are specified in [the report contract](game_detail_report.md), not yet implemented.
 - **Implementation status:** the source policy, economic renames, death coverage, timed build observations, public Service/Artifact switch, and strict multi-source envelope are implemented. Three live games verify the initial mappings; unverified STRATZ time arrays, upgrade levels, complete income, and historical event encodings retain explicit limits. See [source evidence](../reference/stratz-game-detail.md) and [acceptance](../EVALS.md).
 - **Use:** minute-by-minute state review and final-game statistics.
 - **Outside this contract:** performance ratings, role inference, lane-win judgments, teamfight classification, review recommendations, counterfactuals, simulated inventory states, and continuous map replay.
 
-This describes data and tool behavior. It does not define a frontend page or visual layout.
+This describes data and tool behavior. It does not define a frontend page or visual layout. Tables labelled implemented describe the current schema, not exclusions from the newly accepted report target below.
+
+### Accepted report-driven extensions (not implemented)
+
+The report contract owns the default minute/final/interaction/event views and
+heatmap lifecycle; this document remains the field/type/source owner for the
+eight-section DTO. The next DTO work must include:
+
+- Final `cumulative_gold_earned = floor(goldPerMinute * durationSeconds / 60)`
+  from STRATZ, with formula/input provenance, plus explicit final
+  `gold_per_minute` and `experience_per_minute`. Missing inputs yield null.
+  This is the same derived convention verified in OpenDota, not an exact
+  end-frame earned-income measurement; it does not qualify the existing final
+  `earned_gold_net_worth_gap` gate. No minute net worth returns.
+- Explicit timed level, permanent-upgrade, ability/talent and support facts for
+  report construction; keep inventories/purchases/upgrade events owned by builds
+  rather than duplicating full lists inside minute nodes. Default reports show
+  level in place of raw XP; the existing XP facts remain available for queries.
+  Minute assists stay unknown until complete attribution is established.
+- Source-backed received-hero-damage facts and same-game target identities for
+  the interaction matrix; unreported pairs remain null. Keep the matrix and
+  final `heroDamage` in their independently attributed scopes.
+- Final death-gold-loss aggregation from uniquely linked normalized deaths.
+  A missing death or amount prevents a complete total; a known subtotal can
+  remain explicitly partial. It is distinct from the earned-income/net-worth gap.
+- Prefer the now-verified STRATZ per-bucket kill sums for team score, explicit
+  buff events for consumed Scepter/Shard/Moon Shard, and validated zero-based
+  ability ranks. Do not infer held Scepter from consumed status. Unknown ability
+  IDs and unverified mappings stay unknown. OpenDota continues supplying minute
+  earned income, initially farming/XP, neutral enhancement, missing ward groups,
+  and whole Roshan/Aegis/building categories. No model-operated fallback.
+
+The source evidence is [the revalidated reference](../reference/stratz-game-detail.md).
+These target mappings do not silently change the currently implemented tables.
+Heatmaps have a separately accepted transient-position exception: only images
+and a small index persist, never source coordinates in the DTO or Artifact.
 
 ## Input, envelope, and identity
 
@@ -135,7 +170,7 @@ sample facts and remaining semantic gates. It is not an exhaustive API schema.
 | Source facts disagree | Preserve the values and record a material conflict; do not select a winner |
 | Time values | Keep calendar date, exact match seconds, minute samples, and final statistics distinct |
 | Static names | Add English/Chinese names at explicit entity fields before public output, with separate catalog/mapping provenance; do not infer historical mechanics |
-| Images and presentation | Outside this data change; do not add image fetching or a new display-reference contract |
+| Images and presentation | The current DTO adds no image fetching/display protocol. The accepted report target separately permits image-only heatmaps under [its contract](game_detail_report.md); raw positions never enter this DTO. Frontend layout remains separate. |
 | Semantics not verified | Mark them pending; do not assign a business meaning |
 
 Counts, ordering, and field mappings are data transformations, not performance judgments. Each still needs a reproducible rule.
@@ -329,8 +364,9 @@ These are final values, not values copied from the last minute sample. Assists a
 Consumables, other expenditure, asset valuation, and differing observation bounds
 can affect the difference. Do not label it `gold_lost`. A last whole-minute
 `gold_t` sample cannot be subtracted from a later final `networth`, and GPM ×
-duration is not a reliable replacement. Neither STRATZ complete cumulative income
-nor same-instant terminal inputs have been established by the sample: initially
+duration is not a reliable exact same-instant replacement for this gap. The
+accepted report may expose the GPM-derived final income separately with its
+derivation, but exact terminal inputs for this gap remain unestablished: currently
 emit `null` with one coverage limitation when these prerequisites are absent.
 Do not clamp a negative difference or invent a causal breakdown.
 
@@ -672,18 +708,18 @@ This contract does not promise a DTO byte-size target. The old 105 KB and 215 KB
 
 | Kind | Item |
 |---|---|
-| Deliberate scope exclusions | `competition=null`, ten target final-stat fields (gap replaces net worth), no minute net worth, only `source_team_id`/`name` for teams, no ratings or inferred replay facts. Frontend, replay parsing, and a background League index are outside this work. |
-| Source-semantic limits | The meanings of the two neutral-item slots and actions in neutral-item history remain unverified. Unverified actor/team/reward encodings are retained only as scalar coverage evidence. The six objective types above, including Tormentor, are accepted mappings; new codes require verification. |
+| Current implementation scope | `competition=null`, the ten currently implemented final-stat fields, no minute net worth, only `source_team_id`/`name` for teams, no ratings or inferred replay facts. The accepted report target extends final stats, state facts, support and interactions; its image-only heatmaps are separate from frontend layout, replay parsing and a background League index. |
+| Source-semantic limits | OpenDota's second neutral slot is the accepted enhancement supplement; STRATZ has no verified corresponding slot. Neutral-history actions remain unverified. New actor/team/reward encodings require evidence; the report target permits only its individually verified same-player/time Shard association for a Tormentor recipient. |
 | Mapping gaps | `dota_unknown` is explicit source uncertainty. Sampled `guardian_shell` has no exact record in the checked local Catalog; keep that field unknown with scalar evidence until a verified mapping is added. Neither blocks other match facts. |
 | Implemented enrichment | Bilingual entity/unit objects, event conversion, snapshot provenance, and scalar mapping-gap fields are implemented and tested together with public tool/Artifact output. Unknown names/keys remain explicit. |
 | Implemented internal record split to preserve | The resolver consumes complete `OpenDotaGameRecord` values independently of the public `GameDetailResult` constructed by `GameDetailService`. Keep exact source timestamps, side-specific team IDs, identity-validation inputs, and accepted per-game associations available internally when adding the DTO projection. |
 | Death-selection gate | Validate the candidate DEATH-gold/death-record association on additional real games: zero loss, neutral/fountain/creep killers, reincarnation, summons/illusions, repeated timestamps, and missing logs. Compare per-player normalized counts with final totals; retain partial/conflicting coverage rather than adjusting events to fit. |
 | Time/metric gate | Verify each STRATZ point/interval series and bucket boundary; test negative, exact-minute, between-minute, and terminal times. Sample XP agreement alone does not validate farming, gold, or team arrays. |
-| Income gate | Do not replace OpenDota cumulative income until STRATZ complete-income coverage is verified. Same-instant terminal inputs are required for the final gap; null remains correct while absent. |
-| Payload/identity gate | Verify team names, event actor/target namespaces, ability-level semantics, non-hero NPC constants by game version, and actual source errors before enabling those mappings. |
+| Income gate | Do not replace minute OpenDota cumulative income until STRATZ complete-income coverage is verified. The accepted final GPM/whole-duration formula is explicitly derived and source-attributed, not an exact terminal counter; same-instant inputs remain required for the final gap. |
+| Payload/identity gate | Verify team names, new event actor/target namespaces, non-hero NPC constants by game version, and actual source errors. The revalidated zero-based skill ranks apply only to known nonzero abilities under their gate; unknown IDs/encodings remain gaps. |
 | Public acceptance | Deterministic projection/Service/Artifact checks cover the schema, source table, partial GraphQL responses, source reuse, and errors. Three live complete reads and frozen-source model checks are distinct evidence in EVALS; neither guarantees all future provider requests. |
 | Implemented resolver boundary to preserve | `esports.game.resolve` retains complete reads internally and publishes only the resolution evidence owned by the cross-source contract in `DATA.md`. Its Artifact cannot retrieve candidate detail bodies or full source collections. Preserve this separation when extending the governed `game.detail` DTO. |
-| Non-blocking separation | Static names are locally materialized with their own provenance. They do not complete missing historical match facts. Images, frontend behavior, automated unit-data refresh, and deployment remain outside this change. |
+| Non-blocking separation | Static names do not complete missing historical match facts. The accepted heatmap target runs separately and cannot invalidate detail on failure; frontend behavior, automated unit-data refresh and deployment are not implied by these documents. |
 
 The source policy, economic names, and STRATZ-first public switch are implemented.
 The sampled initial death rule and other

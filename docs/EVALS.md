@@ -934,10 +934,66 @@ facts matched the source in all four responses. This is fixed-source answer
 acceptance, not live-model-plus-Provider reliability or a guarantee about every
 extra sentence. Death coverage counts must not be described as killer attribution.
 
-Historical/unknown encodings, complete STRATZ income, individual array buckets
-and skill-level semantics still need evidence before new mappings are enabled.
+Historical/unknown encodings, complete precise STRATZ income and individual
+array buckets still need evidence. Newer source checks support a separate final
+GPM-derived income convention and known zero-based skill ranks; they do not
+mean the target projections have been enabled or universally validated.
 Do not treat these checks as universal coverage, frontend acceptance, or support
 for ratings, inferred roles or causal explanations.
+
+### Accepted default report and heatmap acceptance (pending implementation)
+
+The [report contract](agent/game_detail_report.md) is the target, not a completed
+feature. The [source reference](reference/stratz-game-detail.md) records the
+three-game field audit and bounded performance probes separately from tests.
+
+Required deterministic checks:
+
+- Same-game identity, slot/hero association and each minute's own time remain
+  bound in every report row. Unavailable values preserve ten-player rows and
+  other metrics. Do not join parallel arrays in model context.
+- Final earned income uses the documented floor/GPM/whole-duration formula;
+  integer truncation and missing/invalid inputs have explicit cases. Derived
+  provenance is retained. It cannot enable the exact final gap
+  or fill minute income. Terminal GPM/XPM and minute level stay separate.
+- Incomplete minute assists are null, known deaths stay explicitly known, and
+  source totals do not fabricate missing timed facts. A complete death-gold-loss
+  total requires every normalized death and amount; partial subtotals are named.
+- Equipment/state observations retain their real observation times. Final
+  equipment is not a copied last minute; consumed and held Scepter are distinct.
+  Purchase does not prove activation; unknown skill IDs stay unknown and known
+  zero-based ranks/talents are mapped without guessing hero level.
+- Support purchase/use/placement/destruction stay distinct; mixed-source missing
+  ward groups do not duplicate facts. Gem holding duration is not inferred.
+- Each damage cell binds attacker and target. Reverse source views agree where
+  confirmed; unreported pairs remain null. Preserve the observed discrepancy
+  between final heroDamage and per-target totals rather than correcting either.
+- Whole objective categories use their selected source. Tormentor reward links
+  require unique same-player/time explicit Shard evidence. Neither ROSHAN gold
+  reason nor first inventory Aegis observation generates precise kill/pickup facts.
+
+Heatmap checks must cover all ten players, cumulative 0–5/10… cutoffs, exclusion
+of pre-zero positions, an extra terminal cutoff without duplication, and 256×256
+PNG outputs. For 64:22 the accepted batch is 130 images; the earlier 120-image
+probe excluded the terminal set. Verify common colour semantics, source sample
+coverage, map orientation/version/calibration and the declared death-position scope.
+
+Test source timeout, missing players/positions, malformed coordinates, failed
+encoding/write, cancellation, partial batches and simultaneous identical requests.
+No failure may invalidate ordinary detail or publish an incomplete image as ready.
+Use repository/Artifact/cache/Trace/log test doubles to assert that raw positions,
+trajectories and grids are never retained, including failure paths; retries that
+need positions read the provider again. Before shipping, settle and exercise image
+authorization, versioned reuse, retention, quota and cleanup. Current entity-image
+references and in-memory Artifact expiry are not proof these boundaries exist.
+
+Measure actual deployed source latency, render time, peak memory, encoded image
+bytes and storage writes separately. The Windows placeholder-map probe is only
+an estimate, not a server benchmark or final-map acceptance. Real-model coverage
+must include minute ten-player queries, final earned income, partial assists,
+support counts, damage pairs and objective/reward facts, checking answers against
+source fields and the prepared report. Showing an image to users is not acceptance
+of model vision or accurate extraction of numbers from colours.
 
 ### Esports Match-to-OpenDota game resolution (offline core and opt-in tool implemented; live Provider and Agent acceptance pending)
 

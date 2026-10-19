@@ -24,6 +24,25 @@ generic game statistics.
 - Optional web search for current external information, when enabled by the
   deployment
 
+## Accepted single-game report target (not implemented)
+
+After governed game detail is retrieved, a deterministic default report should
+organize minute ten-player observations, final statistics, hero interactions
+and important events before model analysis. Default minute views show cumulative
+earned gold and level, preserve incomplete K/D/A and recent equipment/state
+observations honestly, and distinguish support actions. This stabilizes the
+reference data for follow-up questions without generating ratings or analytical
+conclusions in code. It does not prescribe a frontend detail-page layout.
+
+On the first explicit heatmap request, generate each player's cumulative
+0–5/10/15… minute images and a terminal set in the background. First-version
+images are 256×256 PNGs showing recorded-position density under a shared scale.
+Ordinary detail does not wait for them. Store images and a small index only;
+do not retain source positions. Heatmaps may be displayed when available, but
+this does not imply the current model can interpret images numerically.
+Data/source rules, unknown values and remaining image-lifecycle prerequisites
+are owned by [the report contract](agent/game_detail_report.md).
+
 ## Core user journeys
 
 - Ask what is happening in a tournament, what has finished, and what is next.

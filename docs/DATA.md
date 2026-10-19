@@ -1135,7 +1135,8 @@ their lookup identity. It is not a PandaScore professional-player ID, and a
 numeric value alone cannot prove which identity system supplied it. No
 automatic cross-source identity association is implied. The implemented
 `player.profile` and `player.recent_games` results identify `stratz` as their
-source; `game.detail` identifies `opendota` and uses a Valve single-game ID.
+source; `game.detail` identifies STRATZ as primary, attributes its fixed OpenDota
+supplements separately, and uses a Valve single-game ID.
 Recent-game rows expose the source `MatchType.id` as
 `valve_game_id` so it can be passed to the detail input. A one-match live
 cross-check (`8960882635`) found matching STRATZ and OpenDota IDs, start time,
@@ -1205,7 +1206,9 @@ stay internal. This does not replace the resolver's OpenDota read/evidence path.
 - Remove minute `net_worth`. Every public `gold_t` value becomes
   `cumulative_gold_earned`; cumulative experience becomes `cumulative_experience`.
   Initial income and unverified STRATZ minute mappings use the explicit OpenDota
-  supplemental groups. STRATZ GPM/gold-event sums do not establish total income.
+  supplemental groups. STRATZ GPM/gold-event sums do not establish a precise
+  minute cumulative-income series. The accepted report target below separately
+  permits final income derived from GPM and whole formal duration.
 - Replace final `net_worth` with `earned_gold_net_worth_gap` (累计金币与净值差),
   requiring reliable inputs at the same final instant. Otherwise null with
   coverage; do not subtract the last minute from final net worth or call the
@@ -1235,6 +1238,40 @@ The [source reference](reference/stratz-game-detail.md) records live comparison
 facts for `8960991322`; it does not certify universal availability or general
 coverage. Tool registration, descriptions, schemas and fixed supplements now
 implement this initial policy; unverified optional mappings stay unavailable.
+
+### Accepted default report and image-only heatmaps (not implemented)
+
+[The report contract](agent/game_detail_report.md) defines the accepted next
+extension: program-built minute ten-player, final ten-player, interaction and
+event views from an expanded governed DTO. STRATZ remains first choice for
+verified fields; one OpenDota detail response supplies all fixed supplements.
+No per-field HTTP calls or model fallback are added. Current source reuse is
+request-scoped, not a durable match cache; parallel source reads are an optional
+future latency optimization, not implemented by this documentation update.
+
+Final earned income uses `floor(goldPerMinute * durationSeconds / 60)` with
+formula/input provenance. It is derived, not a precise terminal counter and not
+permission to populate an exact earned-income/net-worth gap. Death gold loss is
+separately summed from complete, linked explicit death amounts. Default minute
+reports show level instead of raw XP, preserve unknown assists, identify recent
+inventory observations and separate support purchase/use/placement/destruction.
+Hero-damage totals and per-target damage have distinct source scopes.
+
+Heatmaps use an independently requested STRATZ position stream only in transient
+memory. After the user's first explicit request, a bounded background operation
+generates ten-player cumulative 0–5/10/15… minute PNGs and one terminal set when
+not already on a cutoff, at 256×256. Persist only images and a small index with
+source/map/render provenance. Coordinates, trajectories and grids must never
+enter complete detail records, request source caches, Artifacts, Trace or logs.
+This is an explicit exception for the transient image-generation input, not a
+change to ordinary validated detail fidelity. Reusing images does not imply
+retaining their source. Regeneration requiring positions must re-fetch them.
+
+Image retention/quota/cleanup, authorization and reference/entry interfaces must
+be fixed before implementation/release of the image store. Do not assume the
+session Artifact store or static entity-image `display_ref` already supplies
+this lifecycle. Any new limits belong in root `.env`. No new setting, persisted
+image store or heatmap tool has been implemented yet.
 
 ## Account-to-game evidence and local catalog labels
 

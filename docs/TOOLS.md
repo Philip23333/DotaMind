@@ -692,6 +692,21 @@ in addition to the reused OpenDota read. Deterministic boundaries and limited li
 checks are described in [EVALS](EVALS.md); [source facts](reference/stratz-game-detail.md)
 do not guarantee universal Provider coverage.
 
+The accepted [default report target](agent/game_detail_report.md) is not yet a
+new registered tool or implemented `game.detail` return shape. It extends the
+governed DTO for deterministic minute/final/interaction/event views; the model
+reads prepared records and can query full governed detail for follow-ups.
+The target uses source-attributed final GPM-derived income, minute level,
+observed equipment/status, separate support counts and damage scopes; incomplete
+assists remain unknown. It does not expose providers or raw detail to the model.
+
+Heatmaps are separately requested, background-generated cumulative five-minute
+and terminal images, not a prerequisite for ordinary detail. Only generated
+images and a small index may be exposed; never raw positions. Their invocation
+and image-reference interface still require an implementation decision. This
+document registers no speculative tool name or new `display_ref` syntax.
+Generic Artifact read/grep/query and their stage/byte bounds stay unchanged.
+
 `catalog.lookup(kind, ids)` resolves up to 20 exact positive hero or item IDs
 against the active local Valve Dota 2 catalog snapshot. It returns each requested
 ID as `found` or `unknown`, optional English/Chinese display labels, and the
