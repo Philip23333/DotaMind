@@ -467,7 +467,14 @@ def project_stratz_detail(
         )
         if kind == "tormentor_kill" and row.get("time") is not None:
             candidates = [p for p in players or [] if p.get("heroId") == row.get("fromHeroId")]
-            if len(candidates) == 1:
+            matching_messages = [
+                m
+                for m in chats
+                if m.get("type") == 117
+                and m.get("time") == row["time"]
+                and m.get("fromHeroId") == row.get("fromHeroId")
+            ]
+            if len(candidates) == 1 and len(matching_messages) == 1:
                 owner = candidates[0]
                 owner_index = next(k for k, p in enumerate(players) if p is owner)
                 buffs = (owner.get("stats") or {}).get("matchPlayerBuffEvent") or []
@@ -476,7 +483,11 @@ def project_stratz_detail(
                     for j, b in enumerate(buffs)
                     if b.get("time") == row["time"] and b.get("itemId") == 609
                 ]
-                if len(linked) == 1:
+                if (
+                    len(linked) == 1
+                    and type(owner.get("playerSlot")) is int
+                    and sum(p.get("playerSlot") == owner["playerSlot"] for p in players) == 1
+                ):
                     event.reward_player_slot = owner.get("playerSlot")
                     raw = f"players[{owner_index}].stats.matchPlayerBuffEvent[{linked[0][0]}]"
                     event.reward_item = entities.by_id(

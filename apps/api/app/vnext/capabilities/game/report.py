@@ -6,7 +6,6 @@ from typing import Literal
 from pydantic import Field, ValidationInfo, field_validator
 
 from .data import (
-    AbilityUpgradeEvent,
     BuybackEvent,
     CoverageData,
     DraftData,
@@ -33,6 +32,17 @@ class UpgradeState(_Data):
     consumed_moon_shard: bool | None = None
 
 
+class SupportSummary(_Data):
+    item: EntityData
+    action: str
+    count: int
+    scope: Literal["source_total", "known_events"]
+
+    @classmethod
+    def from_count(cls, count):
+        return cls(**count.model_dump(exclude={"source_paths"}))
+
+
 class MinutePlayer(_Data):
     identity: PlayerIdentity
     cumulative_gold_earned: Number | None = None
@@ -46,7 +56,7 @@ class MinutePlayer(_Data):
     inventory_observation: InventoryEvent | None = None
     neutral_observation: NeutralItemEvent | None = None
     upgrades: UpgradeState = Field(default_factory=UpgradeState)
-    support_known_counts: list[SupportCount] = Field(default_factory=list)
+    support_known_counts: list[SupportSummary] = Field(default_factory=list)
 
 
 class MinuteSnapshot(_TimedData):
@@ -58,8 +68,8 @@ class FinalPlayer(_Data):
     identity: PlayerIdentity
     final_stats: FinalStats
     final_loadout: FinalLoadout | None = None
-    support: list[SupportCount] = Field(default_factory=list)
-    ability_upgrade_events: list[AbilityUpgradeEvent] | None = None
+    support: list[SupportSummary] = Field(default_factory=list)
+    ability_upgrade_events_path: str | None = None
 
 
 class DamageCell(_Data):
@@ -138,12 +148,14 @@ def _support_counts(player, boundary):
         ]
         paths = {(p.source, p.path): p for e in known for p in e.source_paths}
         counts.append(
-            SupportCount(
-                item=entity,
-                action=action,
-                count=len(known),
-                scope="known_events",
-                source_paths=list(paths.values()),
+            SupportSummary.from_count(
+                SupportCount(
+                    item=entity,
+                    action=action,
+                    count=len(known),
+                    scope="known_events",
+                    source_paths=list(paths.values()),
+                )
             )
         )
     return counts
@@ -258,13 +270,20 @@ def build_game_report(data):
     final = []
     for p in players:
         build = _unique(data.builds.players, "player_slot", p.identity.player_slot)
+        build_index = next((i for i, b in enumerate(data.builds.players or []) if b is build), None)
         final.append(
             FinalPlayer(
                 identity=p.identity,
                 final_stats=p.final_stats,
                 final_loadout=build.final_loadout if build else None,
-                support=p.support.totals if p.support else [],
-                ability_upgrade_events=build.ability_upgrade_events if build else None,
+                support=[SupportSummary.from_count(t) for t in p.support.totals]
+                if p.support
+                else [],
+                ability_upgrade_events_path=(
+                    f"$.data.builds.players[{build_index}].ability_upgrade_events"
+                    if build_index is not None
+                    else None
+                ),
             )
         )
     events = [

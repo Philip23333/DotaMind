@@ -47,12 +47,16 @@ def ability_events(player, i, entities, coverage):
         path = f"builds.players[{i}].ability_upgrade_events[{j}]"
         origin = f"players[{i}].playbackData.abilityLearnEvents[{j}]"
         key = e.get("abilityId", ABSENT)
-        ability = entities.by_id(
-            key if key != 0 else ABSENT,
-            "ability",
-            f"{path}.ability",
-            f"{origin}.abilityId",
-            coverage,
+        ability = (
+            entities.by_id(
+                key,
+                "ability",
+                f"{path}.ability",
+                f"{origin}.abilityId",
+                coverage,
+            )
+            if key != 0
+            else None
         )
         if key == 0:
             _missing(

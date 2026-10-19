@@ -60,3 +60,17 @@ def test_tormentor_reward_requires_unique_exact_shard_evidence_not_just_chat():
     owner["stats"]["matchPlayerBuffEvent"][0]["time"] += 1
     data = project(record)
     assert all(e.reward_player_slot is None for e in data.events.other_objectives)
+
+
+def test_default_tables_do_not_repeat_long_support_evidence_or_full_skill_logs():
+    import json
+
+    record = primary(9040460429)
+    for player in record.data["players"]:
+        player["playbackData"]["itemUsedEvents"] = [{"time": t, "itemId": 40} for t in range(400)]
+    report = build_game_report(project(record, supplement(record)))
+    def encoded(value):
+        return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode())
+    assert max(encoded(s.model_dump(mode="json")) for s in report.minute_snapshots) < 35840
+    assert encoded([p.model_dump(mode="json") for p in report.final_players]) < 35840
+    assert report.final_players[0].ability_upgrade_events_path.startswith("$.data.builds.players[")
