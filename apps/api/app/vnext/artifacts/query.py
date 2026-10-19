@@ -38,7 +38,7 @@ class ArtifactQueryInput(BaseModel):
         max_length=1024,
         description="Restricted JSONPath: named members, nonnegative indexes, array [*], "
         "and optional [?@.field == literal] filters with comparisons, &&, || and parentheses. "
-        "Use $.data.players[*] to project all player records without a filter.",
+        "Use $.rows[*] to project object records without a filter.",
     )
     fields: list[StrictStr] = Field(
         min_length=1,

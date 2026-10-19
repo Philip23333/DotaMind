@@ -24,22 +24,26 @@ def test_game_detail_input_uses_positive_strict_valve_game_id() -> None:
 
 def test_game_detail_requires_closed_governed_data_and_unique_label_versions() -> None:
     arguments = {
-        "valve_game_id": 12345, "provider": "stratz", "retrieved_at": NOW,
+        "valve_game_id": 12345,
+        "provider": "stratz",
+        "retrieved_at": NOW,
         "sources": {"stratz": {"retrieved_at": NOW}, "opendota": {"retrieved_at": NOW}},
-        "catalog_version": EntityNameResolver(DotaCatalogRepository.load_default()).resolve_many(
-            kind="hero", ids=[],
-        ).catalog_version,
+        "catalog_version": EntityNameResolver(DotaCatalogRepository.load_default())
+        .resolve_many(
+            kind="hero",
+            ids=[],
+        )
+        .catalog_version,
         "unit_mapping_version": UnitCatalog.load_default().version,
-        "data": project(record(source(match_id=12345))),
     }
-    arguments["report"] = build_game_report(arguments["data"])
+    data = project(record(source(match_id=12345)))
+    arguments["report"] = build_game_report(data)
     result = GameDetailResult(**arguments)
-    assert set(result.data.model_dump()) == {
-        "match", "draft", "players", "economy", "builds", "events", "interactions", "coverage",
-    }
-    for data in ({}, {"match_id": 12345, "players": []}, {"raw": {"source": True}}):
+    assert "data" not in result.model_dump() and not hasattr(result, "data")
+    assert "GameDetailData" not in str(GameDetailResult.model_json_schema())
+    for internal in ({}, data.model_dump(), {"raw": {"source": True}}):
         with pytest.raises(ValidationError):
-            GameDetailResult(**{**arguments, "data": data})
+            GameDetailResult(**{**arguments, "data": internal})
     for key in ("catalog_version", "unit_mapping_version", "report"):
         with pytest.raises(ValidationError):
             GameDetailResult(**{k: v for k, v in arguments.items() if k != key})

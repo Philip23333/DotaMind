@@ -12,11 +12,11 @@ def test_levels_use_the_latest_observation_and_preserve_unknown_assists():
     ]
     data = project(record, supplement(record))
     nodes = data.players[0].minute_timeline
-    assert [(n.level, n.level_observed_at_seconds) for n in nodes[:3]] == [
-        (1, -30),
-        (1, -30),
-        (2, 61),
+    assert [n.level for n in nodes[:3]] == [1, 1, 2]
+    assert [(e.time_seconds, e.level) for e in data.players[0].level_events] == [
+        (-30, 1), (61, 2), (121, 3)
     ]
+    assert all(not any("observed_at" in key for key in n.model_dump()) for n in nodes)
     assert all(n.assists is None for n in nodes)
     assert nodes[2].level != data.players[0].final_stats.level
 

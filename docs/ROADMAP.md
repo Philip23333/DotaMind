@@ -490,7 +490,7 @@ Implemented boundaries are:
    without fabricating residual deaths or guessing attackers.
 3. Explicit inventory observations, purchases and timed upgrades stay separate.
    Local bilingual entities/units and source-specific coverage accompany the
-   complete DTO in Artifact storage. Generic Runtime/Artifact responsibilities
+   complete public report in Artifact storage, keeping its DTO internal. Generic Runtime/Artifact responsibilities
    and configured result bounds are unchanged.
 4. The Service, registration, descriptions and source-cache reuse are connected.
    A token enables STRATZ detail; OpenDota supplements remain separately enabled.

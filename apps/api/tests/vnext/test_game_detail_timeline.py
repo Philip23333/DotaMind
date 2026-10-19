@@ -24,8 +24,6 @@ def test_saved_game_minutes_remain_distinct_from_final_statistics() -> None:
         "known_deaths": 0,
         "assists": None,
         "level": None,
-        "level_observed_at_seconds": None,
-        "level_observed_at_label": None,
     }
     assert p.minute_timeline[-1].time_seconds == 2880
     assert data.match.duration_seconds == 2904

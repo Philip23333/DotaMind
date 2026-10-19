@@ -81,6 +81,5 @@ class GameDetailService:
             sources=sources,
             catalog_version=entities.catalog_version,
             unit_mapping_version=self._units.version,
-            data=data,
             report=build_game_report(data),
         )

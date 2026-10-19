@@ -18,9 +18,17 @@ evidence store.
 
 [The report contract](agent/game_detail_report.md) prepares capability-owned
 minute/final/event views without adding game semantics to generic Artifact
-tools. Full governed DTOs and complete logical report results follow the
+tools. Complete logical public report results follow the
 existing externalization and session-ownership rules; this is not a new durable
 evidence store or a change to read/grep/query behavior.
+
+One game-detail logical result uses one Artifact: `report` has six topic modules
+(`overview`, `player_statistics`, `equipment_and_skills`, `support_contributions`,
+`hero_damage`, `events`) and is the only public game-fact structure. Internal
+eight-section DTOs are not serialized, stored or retrievable. Precise histories
+live in the corresponding report module, and coverage appears once. Modules are
+document paths, not separate Artifact identities. Query/read only the requested
+topic and records; same-document history paths do not fetch new provider data.
 
 Heatmap generation has a stricter input boundary: source coordinates, trajectories
 and intermediate grids must never enter Artifacts, raw tool observations, Trace,
@@ -424,8 +432,8 @@ existing Artifacts retain their original fields and are not migrated by query.
 ```json
 {
   "ref": "<existing artifact_ref>",
-  "expression": "$.data.players[?@.identity.account_id == 106305042].minute_timeline[?@.time_seconds == 1500]",
-  "fields": ["time_seconds", "time_label", "cumulative_gold_earned", "known_deaths"],
+  "expression": "$.report.player_statistics.minute_snapshots[?@.time_seconds == 1500].players[?@.identity.account_id == 106305042]",
+  "fields": ["cumulative_gold_earned", "known_deaths"],
   "offset": 0,
   "limit": 20
 }
@@ -434,14 +442,12 @@ existing Artifacts retain their original fields and are not migrated by query.
 ```json
 {
   "ref": "<existing artifact_ref>",
-  "expression": "$.data.players[?@.identity.account_id == 106305042].minute_timeline[?@.time_seconds == 1500]",
-  "fields": ["time_seconds", "time_label", "cumulative_gold_earned", "known_deaths"],
+  "expression": "$.report.player_statistics.minute_snapshots[?@.time_seconds == 1500].players[?@.identity.account_id == 106305042]",
+  "fields": ["cumulative_gold_earned", "known_deaths"],
   "matches": [
     {
-      "path": "data.players.2.minute_timeline.25",
+      "path": "report.player_statistics.minute_snapshots.25.players.2",
       "value": {
-        "time_seconds": 1500,
-        "time_label": "25:00",
         "cumulative_gold_earned": 10840,
         "known_deaths": 2
       },

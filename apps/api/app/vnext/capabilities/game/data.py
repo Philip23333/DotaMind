@@ -199,13 +199,6 @@ class MinuteData(_TimedData):
     known_deaths: StrictInt | None = None
     assists: StrictInt | None = None
     level: StrictInt | None = None
-    level_observed_at_seconds: Number | None = None
-    level_observed_at_label: StrictStr | None = Field(default=None, validate_default=True)
-
-    @field_validator("level_observed_at_label")
-    @classmethod
-    def derive_observed_label(cls, label, info: ValidationInfo):
-        return _checked_time_label(info.data.get("level_observed_at_seconds"), label)
 
 
 class LevelEvent(_TimedData):

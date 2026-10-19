@@ -174,12 +174,16 @@ and pagination, which continue to apply in both stages.
 For Larl's `20:00`, `25:00`, `30:00` samples, an illustrative target expression is:
 
 ```text
-$.data.players[?@.identity.account_id == 106305042].minute_timeline[?@.time_seconds == 1200 || @.time_seconds == 1500 || @.time_seconds == 1800]
+$.report.player_statistics.minute_snapshots[?@.time_seconds == 1200 || @.time_seconds == 1500 || @.time_seconds == 1800]
 ```
 
-For the current GameDetail schema, request `time_seconds`, `time_label`,
-`cumulative_gold_earned`, `cumulative_experience`, `last_hits`, and `known_deaths`
-in `fields`. Historical stored DTOs keep their original schema and are not
+For the current GameDetail schema, request `time_seconds`, `time_label` and
+`players` in `fields`, then locate the exact `identity.account_id` in each minute.
+To select one player directly, append `.players[?@.identity.account_id == 106305042]`
+and request `identity`, `cumulative_gold_earned`, `level`, `last_hits`, `known_deaths`;
+the parent minute's fields are not direct fields of a player row. Precise XP is
+in `report.player_statistics.player_histories[].experience_timeline`.
+Historical stored documents keep their original schema and are not
 migrated by query. These are fields of the selected record; the query engine
 does not identify or add them automatically. The account predicate uses the
 player's actual `identity.account_id` path, not a top-level player member.
@@ -452,7 +456,7 @@ The simplified interface and paging/shared budget are implemented with determini
 checks. Use grep to locate unknown fields/content, read to inspect structure or
 retrieve a complete value/object at a known path, and query to filter records or
 extract selected fields across records, even without a filter. Prefer query
-when only part of each record is needed: `expression="$.data.players[*]"` with
+when only part of each record is needed: `expression="$.report.player_statistics.final_players[*]"` with
 `fields=["identity", "final_stats"]` retrieves player final statistics without
 their unrelated minute histories. Parent-list reads are appropriate when complete
 adjacent records are needed. The complete contract is owned by
@@ -655,7 +659,7 @@ warnings; those warnings do not block the detail read. The model preserves the
 esports-association uncertainty without repeating lookup merely to clear it.
 The detail tool validates the requested Valve record, not its esports association.
 
-`GameDetailService` returns the complete governed eight-section DTO and generic
+`GameDetailService` returns the complete public report and generic
 Artifact externalization returns a bounded observation. The result has no raw
 member or alternate raw-detail handle. English/Chinese hero, item, ability and
 unit names use pinned local resources, with one Catalog/unit-mapping version.
@@ -694,9 +698,22 @@ checks are described in [EVALS](EVALS.md); [source facts](reference/stratz-game-
 do not guarantee universal Provider coverage.
 
 The implemented [default report](agent/game_detail_report.md) is the outer
-`GameDetailResult.report`, alongside `data`. It extends the
-governed DTO for deterministic minute/final/interaction/event views; the model
-reads prepared records and can query full governed detail for follow-ups.
+`GameDetailResult.report`, the sole public game-fact structure. The eight-section
+DTO remains internal to validation and projection. There is no public `data`,
+raw source body or internal DTO retrieval route. The model reads prepared tables
+and corresponding module histories for follow-ups.
+One Artifact contains the complete result. Report version 4 separates `overview`,
+`player_statistics`, `equipment_and_skills`, `support_contributions`, `hero_damage`
+and `events`, with Chinese titles. Select a topic before reading its minute/final
+table; every row retains identity and each minute table retains its own time.
+Use `report.player_statistics.minute_snapshots` for income/level/KDA/farming and
+`report.equipment_and_skills.minute_snapshots` for equipment/upgrades. Minute
+states use only records at or before the boundary and omit original observation
+times; exact times remain in report module histories. Purchase, skill and support
+history paths point within this same report. Coverage appears once and its
+affected-field paths target report, while provider evidence paths stay unchanged.
+Old DTO and top-level report minute/final
+and damage-array paths are removed.
 The target uses source-attributed final GPM-derived income, minute level,
 observed equipment/status, separate support counts and damage scopes; incomplete
 assists remain unknown. It does not expose providers or raw detail to the model.

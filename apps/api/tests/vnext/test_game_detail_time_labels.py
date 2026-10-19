@@ -110,9 +110,7 @@ def test_minute_nodes_remain_required_integer_seconds_without_minute_buckets() -
 def test_economy_labels_are_bound_to_individual_minute_records() -> None:
     assert EconomyData().minute_timeline is None
     assert EconomyData(minute_timeline=[]).minute_timeline == []
-    economy = EconomyData(minute_timeline=[
-        EconomyMinute(time_seconds=t) for t in [0, 600, 3600]
-    ])
+    economy = EconomyData(minute_timeline=[EconomyMinute(time_seconds=t) for t in [0, 600, 3600]])
     assert [n.time_label for n in economy.minute_timeline] == ["00:00", "10:00", "60:00"]
     assert EconomyData.model_validate_json(economy.model_dump_json()) == economy
     with pytest.raises(ValidationError, match="must match"):
@@ -208,7 +206,7 @@ def test_time_labels_reach_the_public_tool_artifact_and_narrow_read() -> None:
                 arguments={
                     "ref": ref,
                     "mode": "read",
-                    "path": "data.players.1.minute_timeline",
+                    "path": "report.player_statistics.minute_snapshots",
                     "offset": 20,
                     "limit": 1,
                 },
@@ -218,7 +216,11 @@ def test_time_labels_reach_the_public_tool_artifact_and_narrow_read() -> None:
             ToolCall(
                 id="duration",
                 name="artifact.read",
-                arguments={"ref": ref, "mode": "read", "path": "data.match.duration_label"},
+                arguments={
+                    "ref": ref,
+                    "mode": "read",
+                    "path": "report.overview.match.duration_label",
+                },
             )
         )
         economy = await registry.execute(
@@ -227,7 +229,9 @@ def test_time_labels_reach_the_public_tool_artifact_and_narrow_read() -> None:
                 name="artifact.query",
                 arguments={
                     "ref": ref,
-                    "expression": "$.data.economy.minute_timeline[?@.time_seconds == 60]",
+                    "expression": (
+                        "$.report.player_statistics.team_economy_timeline[?@.time_seconds == 60]"
+                    ),
                     "fields": ["time_seconds", "time_label", "radiant_gold_adv", "radiant_xp_adv"],
                 },
             )
@@ -240,8 +244,10 @@ def test_time_labels_reach_the_public_tool_artifact_and_narrow_read() -> None:
         assert economy.content["returned"] == 1
         assert economy.content["next_offset"] is None
         assert economy.content["matches"][0]["value"] == {
-            "time_seconds": 60, "time_label": "01:00",
-            "radiant_gold_adv": 113, "radiant_xp_adv": -81,
+            "time_seconds": 60,
+            "time_label": "01:00",
+            "radiant_gold_adv": 113,
+            "radiant_xp_adv": -81,
         }
 
     asyncio.run(run())

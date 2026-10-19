@@ -749,7 +749,7 @@ mutable nested values, and unchanged structured
 errors/cancellation. Adapter tests retain full source validation and reject
 invalid internal read IDs before HTTP. Product composition verifies that the
 resolver uses the same adapter/client through its internal record API, while
-the public tool binds to `GameDetailService`; its Artifact retains the complete governed DTO. Old raw player/build paths
+the public tool binds to `GameDetailService`; its Artifact retains the complete public report. Old raw player/build paths
 fail with artifact_path_not_found, while narrow entity reads return bilingual names. These are deterministic local checks, not live
 provider or model validation.
 
@@ -824,7 +824,7 @@ Deterministic acceptance checks cover:
   converted raw keys do not remain duplicated in business fields. Conflict entries
   contain source `paths` and corresponding scalar `values`.
   Missing optional data in one section does not erase other usable sections.
-- Generic Artifact spill and read return the complete governed DTO while
+- Generic Artifact spill and read return the complete public report while
   respecting existing bounds. The cross-source resolver can still consume
   required validated source facts internally, and its model-visible Artifact
   cannot retrieve the full candidate detail.
@@ -952,6 +952,14 @@ Required deterministic checks:
 - Same-game identity, slot/hero association and each minute's own time remain
   bound in every report row. Unavailable values preserve ten-player rows and
   other metrics. Do not join parallel arrays in model context.
+- Six titled report modules remain in one Artifact, without an exposed internal DTO.
+  Statistics, equipment and support minute/final tables remain independently
+  readable, without unrelated columns. Reordered players/builds must preserve
+  identities and same-report history paths. Compare public histories, relations,
+  first-blood facts and economy records with internal projection inputs. Assert
+  that the result schema, spilled Artifact and read/grep/query do not expose
+  `data`, a DTO handle or any `$.data` path. Coverage has one public copy and
+  translated affected-field paths; provider evidence paths remain unchanged.
 - Final earned income uses the documented floor/GPM/whole-duration formula;
   integer truncation and missing/invalid inputs have explicit cases. Derived
   provenance is retained. It cannot enable the exact final gap
@@ -959,8 +967,10 @@ Required deterministic checks:
 - Incomplete minute assists are null, known deaths stay explicitly known, and
   source totals do not fabricate missing timed facts. A complete death-gold-loss
   total requires every normalized death and amount; partial subtotals are named.
-- Equipment/state observations retain their real observation times. Final
-  equipment is not a copied last minute; consumed and held Scepter are distinct.
+- Minute states display only the owning snapshot time; level, equipment and
+  neutral states do not expose original observation times. Selection still excludes
+  future events; exact times remain in report histories. Final equipment is not a
+  copied last minute; consumed and held Scepter are distinct.
   Purchase does not prove activation; unknown skill IDs stay unknown and known
   zero-based ranks/talents are mapped without guessing hero level.
 - Support purchase/use/placement/destruction stay distinct; mixed-source missing

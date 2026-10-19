@@ -176,7 +176,7 @@ validated source entity and capability-owned output contract
 generic Artifact handling + bounded observation
 ```
 
-The current `game.detail` output is the explicit eight-section DTO owned by [`docs/agent/game_detail_data.md`](docs/agent/game_detail_data.md), with local bilingual entity/unit names and version provenance. Complete OpenDota source records remain internal to validation and identity resolution.
+The current `game.detail` public output is the six-module report owned by [`docs/agent/game_detail_report.md`](docs/agent/game_detail_report.md), with local bilingual entity/unit names and version provenance. The eight-section DTO owned by [`docs/agent/game_detail_data.md`](docs/agent/game_detail_data.md) is internal input to validation/report construction, never a public `data` member, Artifact body or retrieval handle. Complete OpenDota source records remain internal to validation and identity resolution.
 
 The current detail implementation uses STRATZ as primary and fixed
 OpenDota supplemental groups inside `GameDetailService`, as defined by that
@@ -225,7 +225,7 @@ An explicit, reviewed capability contract may define a narrower projection when
 the product data boundary itself requires it. `game.detail` is the accepted
 exception: its source mappings, exclusions, missing-data behavior, and open
 questions are owned by [`docs/agent/game_detail_data.md`](docs/agent/game_detail_data.md).
-Its Artifact stores the complete governed DTO, while generic Artifact tools stay
+Its Artifact stores the complete public report only, while generic Artifact tools stay
 unaware of game semantics.
 
 Do not replace source-shaped outputs without an accepted contract with:
@@ -250,7 +250,7 @@ game.detail(valve_game_id)
   ↓
 Game detail capability/service
   ↓
-validate source identity → capability-owned eight-section DTO
+validate source identity → internal eight-section DTO → public six-module report
   + exact local bilingual entity/unit labels and version provenance
   → generic Artifact handling + bounded observation
 ```
@@ -323,8 +323,8 @@ while preserving generic search/read access.
 - Preserve complete validated provider business facts by default. Do not decide
   field-by-field what is worth retaining based on known prompts or current
   product scenarios. `game.detail` is the accepted explicit projection
-  exception defined in its owner contract; the Artifact retains that complete
-  governed DTO.
+  exception defined in its owner contracts; the Artifact retains the complete
+  public report, with precise histories and coverage, not its internal DTO.
 - Validation may normalize source values harmlessly, but it must not intentionally
   narrow a source document into a summary. Provider HTTP headers, credentials,
   request tokens, and transport/pagination envelopes are not business facts and

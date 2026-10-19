@@ -65,9 +65,9 @@ def test_service_projects_one_internal_record_with_separate_label_provenance() -
     assert result.valve_game_id == _MATCH_ID and result.retrieved_at == record.retrieved_at
     assert result.catalog_version.patch == DotaCatalogRepository.load_default().manifest.patch
     assert result.unit_mapping_version == UnitCatalog.load_default().version
-    assert result.data.match.duration_seconds == 2904
-    assert result.data.players[0].identity.hero.name_en == "Anti-Mage"
-    assert "extension" not in result.data.model_dump()
+    assert result.report.overview.match.duration_seconds == 2904
+    assert result.report.player_statistics.final_players[0].identity.hero.name_en == "Anti-Mage"
+    assert "data" not in result.model_dump()
     assert record.data["extension"]["ordered"] == [0, False, None]
 
 
@@ -79,10 +79,10 @@ def test_public_and_internal_nested_data_do_not_share_mutable_values() -> None:
             GameDetailInput(valve_game_id=_MATCH_ID),
         )
     )
-    result.data.players[0].final_stats.kills = 10
+    result.report.player_statistics.final_players[0].final_stats.kills = 10
     assert record == before
     record.data["radiantTeam"]["name"] = "internal-only"
-    assert result.data.match.teams.radiant.name == "Team Spirit"
+    assert result.report.overview.match.teams.radiant.name == "Team Spirit"
     assert record.data["startDateTime"] == 1_791_738_028
 
 
@@ -108,9 +108,9 @@ def test_service_pins_catalog_before_source_read_and_next_query_uses_new_snapsho
     first = asyncio.run(service.get_game_detail(GameDetailInput(valve_game_id=_MATCH_ID)))
     second = asyncio.run(service.get_game_detail(GameDetailInput(valve_game_id=_MATCH_ID)))
     assert supplier_calls == [old, new]
-    assert first.data.players[0].identity.hero.name_en == "Anti-Mage"
+    assert first.report.player_statistics.final_players[0].identity.hero.name_en == "Anti-Mage"
     assert first.catalog_version.patch == old.manifest.patch
-    assert second.data.players[0].identity.hero.name_en == "New label"
+    assert second.report.player_statistics.final_players[0].identity.hero.name_en == "New label"
     assert second.catalog_version.patch == "new-patch"
 
 
@@ -149,11 +149,11 @@ def test_supplement_unavailability_preserves_primary_and_has_no_successful_sourc
     )
     result = asyncio.run(service.get_game_detail(GameDetailInput(valve_game_id=_MATCH_ID)))
     assert result.provider == "stratz" and set(result.sources) == {"stratz"}
-    assert result.data.players[0].identity.hero.id == 1
-    assert result.data.economy.minute_timeline is None
-    assert result.data.events.roshan_kills is None
+    assert result.report.player_statistics.final_players[0].identity.hero.id == 1
+    assert result.report.player_statistics.team_economy_timeline is None
+    assert result.report.events.roshan_kills == []
     assert primary.calls == extra.calls == [_MATCH_ID]
-    assert any(code in (g.reason or "") for g in result.data.coverage.groups)
+    assert any(code in (g.reason or "") for g in result.report.coverage.groups)
 
 
 @pytest.mark.parametrize(

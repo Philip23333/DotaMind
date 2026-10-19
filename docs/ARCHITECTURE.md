@@ -128,7 +128,9 @@ programming, local resource and storage errors keep their normal behavior.
 The capability owns economic naming, normalized deaths, timed build observations,
 and exact unit/entity conversion. Runtime and generic Artifact tools own no
 provider selection or game semantics. Generic Artifact handling stores the complete
-governed DTO and returns bounded observations. Ordinary detail introduces no
+public report and returns bounded observations. The eight-section DTO is an
+internal validation/projection input, never a serialized public member or
+Artifact retrieval route. Ordinary detail introduces no
 dynamic routing framework, model fallback workflow or replay parser; its separate
 heatmap extension below owns the explicitly bounded image store.
 
@@ -150,7 +152,10 @@ The implemented extension follows [the default report and heatmap contract](agen
 The capability constructs deterministic report views from
 its governed DTO; generic Runtime/Artifact tools do not become report builders.
 Default reports bind player/time/metric facts before the model analyses them,
-while complete governed detail remains inspectable for follow-ups.
+while precise histories live in the corresponding report modules for follow-ups.
+The six modules and one coverage copy share one Artifact; no parallel public
+`data` tree exists. Coverage locations target report; source-evidence paths still
+describe the provider records from which the facts were obtained.
 
 Heatmaps run separately after an explicit request, without blocking ordinary
 detail. One temporary STRATZ position read feeds a bounded background render;

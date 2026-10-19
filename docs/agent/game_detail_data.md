@@ -4,7 +4,7 @@
 
 This document is the sole detailed data contract for `game.detail`.
 
-- **Current implementation:** `game.detail` uses STRATZ as primary and fixed OpenDota supplements, returning the governed eight-section DTO with bilingual labels, time labels, normalized death facts, source-specific coverage, and pinned label versions.
+- **Public contract:** `game.detail` exposes only the six-module `report` with bilingual labels, time labels, normalized facts, source-specific coverage, and pinned label versions. The eight-section `GameDetailData` is internal projection input, never a public result member, Artifact body or alternate retrieval route.
 - **Accepted target / implementation:** the eight-section DTO, bilingual labels, STRATZ-first/fixed-OpenDota boundary and program-built report are implemented. The [report contract](game_detail_report.md) owns report views and the separate image-only heatmap capability. Heatmap infrastructure is implemented; verified production map assets/calibration remain unavailable for the sampled version, so it does not publish substitute images.
 - **Verification scope:** three live games verify the governed detail/report path; unverified STRATZ minute arrays, precise terminal income and historical encodings retain explicit limits. Deterministic, live-source and real-model checks are separated in [EVALS](../EVALS.md).
 - **Use:** minute-by-minute state review and final-game statistics.
@@ -43,7 +43,9 @@ eight-section DTO. Its extensions include:
   and whole Roshan/Aegis/building categories. No model-operated fallback.
 
 The source evidence is [the revalidated reference](../reference/stratz-game-detail.md).
-The implemented mappings and the precise public fields are described below.
+The internal governed mappings are described below. Public organization and paths
+are owned by [the report contract](game_detail_report.md); internal DTO paths in
+this document describe projection inputs, not model-facing retrieval paths.
 Heatmaps have a separately accepted transient-position exception: only images
 and a small index persist, never source coordinates in the DTO or Artifact.
 
@@ -63,10 +65,9 @@ The public result has one provenance envelope:
 | `sources` | provider-keyed object | Each successful read has its own `retrieved_at`; keys are `stratz` and, when read successfully, `opendota`. Coverage and event provenance refer to these keys. No credentials, raw bodies, or retrieval handles. |
 | `catalog_version` | object | The existing local entity-name resolver's snapshot metadata: `source`, `patch`, `generated_at`, and `schema_version`; one pinned snapshot per detail operation |
 | `unit_mapping_version` | string | Version of the validated, independently maintained unit mapping used for this result; not a game patch or a request timestamp |
-| `data` | `GameDetailData` | The eight governed sections below |
-| `report` | required `GameReport` | Program-prepared minute/final/damage/event views from the same governed data; no raw source body or nullable legacy result. Exact report fields are owned by [the report contract](game_detail_report.md). |
+| `report` | required `GameReport` | The sole public game-fact structure: six modules, precise histories, coverage and limitations. Exact fields are owned by [the report contract](game_detail_report.md). No `data`, raw source body or internal DTO handle. |
 
-The eight sections in `data` are `match`, `draft`, `players`, `economy`, `builds`, `events`, `interactions`, and `coverage`. Each section appears once. Section fields use `null` for missing or unknown source facts; source-declared empty collections remain empty collections. Catalog and unit-mapping versions occur once in the outer result, not on every entity or timeline node. These versions attribute static labels and mapping rules; they do not claim historical match-patch mechanics.
+The eight internal DTO sections are `match`, `draft`, `players`, `economy`, `builds`, `events`, `interactions`, and `coverage`. They are consumed by report construction inside the capability. Fields use `null` for missing or unknown source facts; source-declared empty collections remain empty collections. Catalog and unit-mapping versions occur once in the outer public result, not on every entity or timeline node. These versions attribute static labels and mapping rules; they do not claim historical match-patch mechanics.
 
 STRATZ `match.id` and each supplemental OpenDota `match_id` must independently
 equal the requested positive `valve_game_id` before their facts can enter the DTO.
@@ -74,10 +75,11 @@ Do not join players by array position: validate same-game account/slot/hero fact
 and leave an ambiguous association unavailable. The DTO does not repeat outer
 identity metadata inside `data.match`.
 
-The result and its Artifact contain the complete governed DTO. They contain no
-`raw` field and expose no model-facing handle that retrieves either original
-provider object. Generic Artifact read, grep, and query operate on the stored DTO
-without provider-specific behavior.
+The result and its single Artifact contain the complete public report only.
+They contain neither the internal DTO nor a `raw` field or a handle retrieving
+either. Generic Artifact read, grep and query operate on the stored report without
+provider-specific behavior. Precise histories move to the corresponding report
+module; coverage has one public copy and its affected-field paths target report.
 
 The OpenDota adapter retains complete `OpenDotaGameRecord` values for the identity
 resolver and supplemental projection. The STRATZ adapter independently validates
@@ -224,8 +226,10 @@ The following core public timeline collections use records with their own
 
 `players[].level_events`, `players[].support.events`, and
 `builds.players[].permanent_upgrade_events` also use the same time/label pair.
-Minute/report `level_observed_at_seconds` has `level_observed_at_label`; it is
-the actual previous observation time, never a relabelled minute boundary.
+Minute timelines and report snapshots expose only their owning minute's
+`time_seconds/time_label`. Level, inventory and neutral-item states do not carry
+separate observation timestamps in minute views. Select only observations at or
+before the minute boundary; retain exact original times in the event histories.
 
 Time and payload correspondence is constructed and validated below the public
 capability boundary. Item slots remain ordered lists inside one inventory
@@ -407,7 +411,6 @@ coverage is partial.
 | `known_deaths` | integer or `null` | Count `events.hero_deaths` rows for this victim with known time at or before the node; records with unknown time do not enter the curve |
 | `assists` | `null` | Complete minute attribution is unverified; not zero or an inferred count. |
 | `level` | integer or `null` | Latest unique explicit level observation at or before the minute; no future observation or final-level backfill. |
-| `level_observed_at_seconds`, `level_observed_at_label` | number / string or `null` | That level observation's own time and program label. |
 
 `last_hits` and `denies` initially use OpenDota `lh_t/dn_t` on their own `times`.
 Do not presume STRATZ `lastHitsPerMinute/deniesPerMinute` are cumulative counters
@@ -464,7 +467,7 @@ shift/truncation rule follows. Its 640 player XP prefix sums match OpenDota,
 which is sample evidence for a candidate conversion, not all-array validation.
 
 Query a minute by its `time_seconds`, for example
-`expression="$.data.economy.minute_timeline[?@.time_seconds == 60]"` with
+`expression="$.report.player_statistics.team_economy_timeline[?@.time_seconds == 60]"` with
 `fields=["time_seconds", "time_label", "radiant_gold_adv", "radiant_xp_adv"]`.
 The two advantage metrics preserve their original meanings. Additional economy
 fields require a separate decision.

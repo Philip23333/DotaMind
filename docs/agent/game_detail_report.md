@@ -19,7 +19,7 @@ Not included：程序生成分析结论、评分、角色判断、团战分类�
   → 验证身份、字段语义、同场玩家关联、时间轴及来源
   → 扩展后的八部分 GameDetail DTO
   → 程序组织默认报表：比赛概况、分钟十人表、终局十人表、交互表、重要事件
-  → 完整治理数据与报表可通过 Artifact 延续，模型按需读取
+  → 只将公开 report 写入单个 Artifact，模型按需读取
 
 用户首次明确请求热力图
   → 后台单独读取 STRATZ 位置序列（仅内存）
@@ -29,23 +29,31 @@ Not included：程序生成分析结论、评分、角色判断、团战分类�
 
 `GameDetailService` 及其能力内部投影负责来源选择、确定性关联和报表组装。
 Runtime、Catalog 和通用 Artifact 工具不学习比赛口径或热力图算法。
-报表是治理数据的确定性视图，不替代完整 DTO，不开原始 Provider 响应的旁路。
-它不是第九个业务 section。`game.detail` 的外层 `report` 与 `data` 并列；
-报表和完整治理 DTO 经同一逻辑结果进入 Artifact，不建立原始源对象旁路。
+报表是内部治理 DTO 的确定性公开投影，是模型唯一可见的比赛数据组织。
+`GameDetailResult` 只含身份/来源/目录版本元信息与 `report`，不含 `data`、内部 DTO、
+`raw` 或其检索句柄。内部八部分 DTO 留在能力内部，用于校验和组装，不写入工具
+结果或 Artifact。公开 report 经同一逻辑结果进入**单个 Artifact**；六个模块只是
+同一 JSON 文档内的路径。模型按模块与分钟读取，不一次接收整份文档。
 
 | `report` 字段 | 当前结构 |
 |---|---|
-| `schema_version` | `1` |
-| `match/draft` | 同一治理 DTO 的比赛与选禁事实 |
-| `minute_snapshots[]` | `time_seconds/time_label` + `players[]`；每行有完整 `identity`、累计收入、等级及真实观测时间、已知 K/D、未知 A、正反补、`inventory_observation/neutral_observation`、`upgrades`、`support_known_counts` |
-| `final_players[]` | `identity/final_stats/final_loadout/support`，以及 `ability_upgrade_events_path`，指向同一结果的 `$.data.builds.players[i].ability_upgrade_events` |
-| `damage_matrix[]` | 攻击者/目标槽位与双语英雄、`dealt`、`received_view`、`agreement=consistent/conflict/single_view/unreported`；未报告组合为 null |
-| `events[]` | 时间/标签、`kind` 与完整治理 `fact`；每次英雄死亡只占一行，关联的击杀不重复 |
+| `schema_version` | `4`；移除内部 DTO 和所有 `$.data...` 路径，不保留兼容副本 |
+| `overview`，比赛概况与选禁 | `match/draft`；同一治理 DTO 的比赛与选禁事实 |
+| `player_statistics`，玩家战绩与发育统计 | `minute_snapshots[]` 为时间/标签 + 十人身份、累计收入、等级、已知 K/D、未知 A、正反补；`final_players[]` 为身份与终局统计；`team_economy_timeline` 为团队金币/经验优势；`player_histories[]` 保留身份、精确等级事件与独立经验时间线 |
+| `equipment_and_skills`，装备、永久升级与技能成长 | 分钟装备/中立/永久状态、终局装备；`player_histories[]` 保留身份及购买、库存、中立、技能、永久升级的精确历史；终局行的明细路径指向该模块历史 |
+| `support_contributions`，辅助物品使用、插眼与排眼 | 分钟已知计数、终局计数；`player_histories[]` 保留身份与精确行为事件；终局行 `events_path` 指向该模块历史 |
+| `hero_damage`，英雄间造成与承受伤害 | `matrix[]` 保留双向伤害和一致性；`player_relations[]` 保留击杀/治疗关系，以及无法唯一放入矩阵的伤害记录，不重复已成功绑定的伤害明细 |
+| `events`，击杀与重要目标事件 | 六类时间日志；每次英雄死亡只占一行；`first_blood` 单独保留首血报告、明确首血事件与差异，不从击杀日志猜首血 |
 | `coverage/limitations` | 原治理覆盖范围与固定口径说明，无模型评分 |
 
-报表辅助计数仅保留物品、动作、计数及覆盖口径；完整来源路径和技能事件留在 DTO，
-不随每一分钟重复。三场样本整分钟十人表约 22–24 KiB、终局十人表约 21–25 KiB；
-不是通用大小保证。更大结果仍遵守通用 35 KiB 单次返回边界与分页规则。
+每个模块都有固定中文 `title` 说明主题；分钟表各自携带时间/标签和玩家身份，不能
+通过数组位置跨表关联。战绩表不嵌入装备和辅助明细，装备表不嵌入战绩和辅助计数。
+辅助计数仅保留物品、动作、计数及覆盖口径；完整来源路径和技能事件留在对应模块历史，
+不随每一分钟重复。明细路径为同一 Artifact 的 JSONPath，例如
+`$.report.equipment_and_skills.player_histories[0].ability_upgrade_events`，不是新的远程检索或 Artifact 引用。
+比赛、选禁、终局数据、coverage 与事件事实不再并列复制进另一套 DTO。身份绑定、
+分钟状态与精确事件历史的必要重复保留。更大结果仍遵守通用
+35 KiB 单次返回边界与分页规则，不承诺整个模块能在一次返回中全部容纳。
 
 保留一次 OpenDota 整场详情读取供所有固定补充组共享；同一请求中已有成功读取可
 复用。不得因增加一个字段再发一次详情请求，也不把补充任务交给模型。当前两源
@@ -61,17 +69,17 @@ Runtime、Catalog 和通用 Artifact 工具不学习比赛口径或热力图算�
 ### 比赛与分钟十人表
 
 比赛概况复用 `match`、`draft` 的结果、正式时长、双方和选禁事实，不补评分。
-分钟表按 `time_seconds/time_label` 分组，每个时间点包含同场十名玩家；同一行带
+三个主题的分钟表均按 `time_seconds/time_label` 分组，每个时间点包含同场十名玩家；同一行带
 `player_slot`、可用账号身份和英雄身份，缺值不会导致丢掉整名玩家或整个时间点。
 
 | 报表数据 | STRATZ 优先路径及治理规则 | 当前实现与限制 |
 |---|---|---|
 | 累计获得金币 | 钱包 `gold`、`goldSpent`、净值和每分钟金币数组均不能替代累计收入 | `times + gold_t` → `cumulative_gold_earned`，当前已具备 |
-| 等级 | `playbackData.playerUpdateLevelEvents {time,level}`，使用边界之前最近的明确等级更新，保留观测时间；没有起始依据时未知 | `players[].level_events` 与分钟/报表等级已投影；默认表不展示原始 XP 数字，原有累计 XP 仍可供追问 |
+| 等级 | `playbackData.playerUpdateLevelEvents {time,level}`，使用不晚于边界的最近明确等级更新；分钟节点只显示所属分钟，原时间留在 `level_events`；没有起始依据时未知 | `players[].level_events` 与分钟/报表等级已投影；默认表不展示原始 XP 数字，原有累计 XP 仍可供追问 |
 | 击杀 / 死亡 | 从一次归一化的死亡事实累计已确认击杀和已定位死亡；未知攻击者不抹掉死亡 | 当前有 `kills/known_deaths`；部分事件不能冒充完整 K/D |
 | 助攻 | 原始助攻事件及死亡记录的 assist 列表不能直接累计为完整 A | 当前没有完整分钟 A；未建立完整映射前显示 `null`，单独保留已确认助攻证据及部分覆盖，不补零、不造完整曲线 |
 | 正补 / 反补 | STRATZ `csEvents` 或分钟数组只有在该字段的语义、时间轴与覆盖验证通过后才能供应 | 首版继续使用 `times + lh_t/dn_t`；某场 STRATZ 空事件/全零数组不能抹掉有效 OpenDota 数据 |
-| 主物品栏、背包、中立装备 | `playbackData.inventoryEvents`；读取边界之前最近的明确库存观察，使用记录自己的时间/标签 | 已在 `inventory_observation` 关联；只选不晚于边界的观察，即使未来快照在绝对秒数上更近也不采用；不从购买推算 |
+| 主物品栏、背包、中立装备 | `playbackData.inventoryEvents`；读取不晚于边界的最近明确库存观察，分钟对象不含原观察时间/标签 | 已在 `inventory_observation` 关联；即使未来快照在绝对秒数上更近也不采用；不从购买推算；`neutral_observation` 同样不含原时间 |
 | 中立强化 | STRATZ 所查库存 schema 没有可靠第二中立槽映射 | `item_neutral2` 供应终局；带时间的 `neutral_item_history` 供应明确历史观察，不能给终局槽位编造时间 |
 | 神杖、魔晶、银月状态 | `stats.matchPlayerBuffEvent` 中确证的永久升级；神杖持有状态另从库存观察取得 | 已有永久升级事件与报表状态；终局未知状态可补经关联 OpenDota 0/1 标志。购买不等于激活，缺事件不自动为 false |
 | 技能与天赋 | `playbackData.abilityLearnEvents` 的明确时间、技能、天赋标记；已验证等级按源 `level+1` 转换 | 已实现加点线路与跳转路径；不额外合成完整分钟技能状态。`abilityId=0` 未知；`levelObtained` 不充当英雄等级 |
@@ -79,8 +87,15 @@ Runtime、Catalog 和通用 Artifact 工具不学习比赛口径或热力图算�
 
 Minute table 是报表视图，不要求把完整装备对象、技能列表和所有辅助事件重复写进每个
 玩家的 DTO 分钟节点；保留一次事件/状态事实后按明确时间组织，避免重复大对象。
-最近已知状态须带来源时间，不做插值、不声称中间变化已完整观察。来源缺失与正常
-空槽分开；终局有值也不能倒填此前状态。
+分钟快照及 DTO 分钟时间线只保留所属分钟的 `time_seconds/time_label`，不保留等级、
+装备、中立道具等子状态的原始观察时间，也不把旧观察时间改写为新的事件时间。
+状态展示统一使用快照分钟；不做插值，不采用未来记录。精确原时间保留在相应 report
+模块的等级、库存、中立装备、永久升级等事件历史中，供明确的事件追问使用。来源缺失与正常
+空槽分开；终局有值也不能倒填此前状态。分钟装备/中立对象不带时间，
+与精确历史中的带时间事件类型分开。读取 30:00 战绩应筛选
+`$.report.player_statistics.minute_snapshots[?@.time_seconds == 1800]`；读取同分钟装备
+应筛选 `$.report.equipment_and_skills.minute_snapshots[?@.time_seconds == 1800]`。
+筛选结果中的十人行都绑定自身身份，不能把快照数组的下标当作分钟身份。
 
 ### 辅助性贡献
 
@@ -121,7 +136,8 @@ damage-report 分类总量保留各自口径；未验证差异原因时不解释
 
 ### 重要事件日志
 
-以归一化死亡事实为基础，一次击杀及其对应死亡只展示一次，双方槽位、英雄/单位、
+事件模块按上述六个类别分表，每类内部按已知时间升序排列，未知时间置后；相同时间
+不推断先后。以归一化死亡事实为基础，一次击杀及其对应死亡只展示一次，双方槽位、英雄/单位、
 时间和来源绑定在同一条记录上。非玩家击杀、未知击杀者、未知时间死亡仍保留，
 不为补齐十人最终 K/D 编造事件；助攻只有明确可确认时才附加。
 
@@ -198,7 +214,8 @@ Decision：首次明确请求后后台生成整场图片；普通 `game.detail` 
 1. 已扩展能力拥有的 DTO 字段与来源映射：终局收入/GPM/XPM、等级、永久状态、
    技能、支持事件、伤害和死亡损失聚合；保持 OpenDota 固定补充和源身份校验。
 2. 已实现程序化报表组装，验证每条记录的玩家、时间和指标；真实模型覆盖默认阅读与
-   后续追问。DTO/报表完整数据仍经 Artifact 按需读取，不一次塞入全部模型上下文。
+   后续追问。只有完整公开 report 经 Artifact 按需读取；内部 DTO 不序列化，
+   也不一次把全部报表塞入模型上下文。
 3. 图片存储、后台生成和复用已实施；确定性测试覆盖失败、取消和原始位置不留存。
    正式地图校准、生产图片展示、部署资源及多副本协调不因这些测试自动通过。
 

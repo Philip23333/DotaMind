@@ -117,7 +117,7 @@ handle for retrieving candidate details.
 
 The accepted `game.detail` data projection is defined in
 [`agent/game_detail_data.md`](agent/game_detail_data.md). It changes the
-public detail result and its Artifact to the governed DTO while preserving
+public detail result and its Artifact to the governed report while preserving
 internal source facts required for identity checks. The resolver's public
 evidence boundary is implemented independently of that pending projection:
 the matcher still consumes complete candidate details, while its Artifact cannot
@@ -1185,9 +1185,10 @@ times in `sources`; group/event paths identify actual provenance. There is no
 dynamic router, model-operated provider fallback, retry loop, or raw-object
 Artifact side channel. Cancellation and unexpected local failures propagate.
 
-The complete public DTO is stored by generic Artifact handling. The schema,
-source mappings and failure policy are owned by
-[`agent/game_detail_data.md`](agent/game_detail_data.md). Local bilingual labels
+The complete public report is stored by generic Artifact handling; the eight-section
+DTO stays internal. Public organization is owned by
+[`agent/game_detail_report.md`](agent/game_detail_report.md); internal source
+mappings and failure policy by [`agent/game_detail_data.md`](agent/game_detail_data.md). Local bilingual labels
 retain their separate `catalog_version` and `unit_mapping_version`; unmapped
 source scalars stay only in coverage. This does not change Catalog publication,
 refresh units remotely, or infer historical mechanics or live unit ownership.
@@ -1267,9 +1268,18 @@ This is an explicit exception for the transient image-generation input, not a
 change to ordinary validated detail fidelity. Reusing images does not imply
 retaining their source. Regeneration requiring positions must re-fetch them.
 
-`GameDetailResult.report` contains these prepared views alongside the complete
-eight-section `data`. Support report counters omit repeated evidence paths;
-skill lines remain in DTO builds with a report-provided path. This keeps default
+`GameDetailResult.report` is the only public game-fact structure. The eight-section
+DTO remains internal, used for validation and report construction; it is never
+serialized into tool results/Artifacts and has no model-facing retrieval handle.
+The report's six titled topic modules share this single Artifact; statistics,
+equipment and support have separate minute/final tables, damage has its own
+matrix and event categories have separate lists. Every table binds its time and
+identities independently. Minute states omit separate observation timestamps;
+their exact history remains in corresponding report modules. Coverage appears
+once and its affected-field paths target report. Provider choices, source
+metrics and known/unknown semantics do not change when tables are split.
+Support summary counters omit repeated evidence paths; full events/count evidence
+and skill lines live in their report modules, with same-report history paths. This keeps default
 tables compact without deleting their source-backed facts.
 
 The separate `game.heatmaps` tool and image route are implemented with a writable
@@ -1297,7 +1307,7 @@ and returns display names with snapshot-version metadata. With
 `DOTAMIND_DATA_DIR` unset, that snapshot is bundled with the API; when configured,
 the API uses the published file-backed snapshot and background loader. These
 labels have provenance separate from provider match facts. The accepted
-`game.detail` projection adds them to its governed DTO before Artifact storage;
+`game.detail` projection adds them to its internal DTO and then public report before Artifact storage;
 the complete internal OpenDota record is not rewritten. This integration is verified offline. Unknown IDs remain visible as unknown. Match statistics support only the
 conclusions they encode; missing timeline, purchase, or identity data remains
 unknown and must not be interpreted as proof that an event did not happen.

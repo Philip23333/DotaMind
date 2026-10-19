@@ -420,7 +420,7 @@ def test_game_detail_result_spills_to_artifact_and_reads_narrow_player_path() ->
                 arguments={
                     "ref": ref,
                     "mode": "read",
-                    "path": f"data.players.{index}.identity.hero",
+                    "path": f"report.player_statistics.final_players.{index}.identity.hero",
                 },
             )
         )
@@ -431,13 +431,15 @@ def test_game_detail_result_spills_to_artifact_and_reads_narrow_player_path() ->
     assert serialized_size(player_read.content) <= settings.artifact_limits.observation_max_bytes
     build_read = _run(registry.execute(ToolCall(
         id="build-read", name="artifact.read", arguments={
-            "ref": ref, "mode": "read", "path": f"data.builds.players.{index}",
+            "ref": ref, "mode": "read",
+            "path": f"report.equipment_and_skills.player_histories.{index}.purchase_events",
+            "limit": 100,
         },
     )))
     assert build_read.status == "ok"
     assert serialized_size(build_read.content) <= settings.artifact_limits.observation_max_bytes
     assert any(e["item"] and e["item"]["name_en"] == "Manta Style"
-               for e in build_read.content["value"]["purchase_events"])
+               for e in build_read.content["value"])
     raw_read = _run(registry.execute(ToolCall(
         id="raw-read", name="artifact.read", arguments={
             "ref": ref, "mode": "read", "path": "data.extension",
@@ -555,10 +557,38 @@ def test_recent_games_tool_id_flows_into_game_detail_tool() -> None:
 
     assert detail_result.status == "ok"
     detail = detail_result.content
-    assert detail["valve_game_id"] == _MATCH_ID
-    assert detail["data"]["match"]["game_winner"] == "dire"
-    assert detail["data"]["players"][0]["identity"]["account_id"] == account_id
-    assert detail["data"]["players"][0]["identity"]["hero"]["id"] == (
-        recent_match["players"][0]["heroId"]
-    )
+    if detail.get("externalized"):
+
+        def read(path):
+            result = _run(
+                registry.execute(
+                    ToolCall(
+                        id=f"read-{path}",
+                        name="artifact.read",
+                        arguments={"ref": detail["artifact_ref"], "mode": "read", "path": path},
+                    )
+                )
+            )
+            assert result.status == "ok"
+            return result.content["value"]
+
+        assert read("valve_game_id") == _MATCH_ID
+        assert read("report.overview.match.game_winner") == "dire"
+        row = read("report.player_statistics.final_players.0")
+        blocked = _run(
+            registry.execute(
+                ToolCall(
+                    id="internal-dto",
+                    name="artifact.read",
+                    arguments={"ref": detail["artifact_ref"], "mode": "read", "path": "data"},
+                )
+            )
+        )
+        assert blocked.status == "error"
+    else:
+        assert detail["valve_game_id"] == _MATCH_ID and "data" not in detail
+        assert detail["report"]["overview"]["match"]["game_winner"] == "dire"
+        row = detail["report"]["player_statistics"]["final_players"][0]
+    assert row["identity"]["account_id"] == account_id
+    assert row["identity"]["hero"]["id"] == (recent_match["players"][0]["heroId"])
     assert recent_match["players"][0]["isVictory"] is False

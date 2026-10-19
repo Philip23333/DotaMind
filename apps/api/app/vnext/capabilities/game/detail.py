@@ -17,7 +17,7 @@ from pydantic import (
 
 from app.vnext.catalog import EntityNameCatalogVersion
 
-from .data import GameDetailData, Provider
+from .data import Provider
 from .report import GameReport
 
 
@@ -58,8 +58,9 @@ class GameDetailResult(BaseModel):
     sources: dict[Provider, SourceRead]
     catalog_version: EntityNameCatalogVersion
     unit_mapping_version: StrictStr = Field(min_length=1)
-    report: GameReport = Field(description="Required prepared default data views.")
-    data: GameDetailData = Field(description="Eight governed sections; no raw provider object.")
+    report: GameReport = Field(
+        description="Sole public game facts: topic tables, histories and coverage."
+    )
 
     @model_validator(mode="after")
     def consistent_provenance(self) -> GameDetailResult:
@@ -68,29 +69,36 @@ class GameDetailResult(BaseModel):
             or self.sources[self.provider].retrieved_at != self.retrieved_at
         ):
             raise ValueError("Primary source timestamp must match the result")
-        for group in self.data.coverage.groups:
+        for group in self.report.coverage.groups:
             if any(p.source not in self.sources for p in group.source_paths):
                 raise ValueError("Coverage refers to a source that was not read")
-        if self.data.events is not None:
+        if self.report.events is not None:
             for field in (
-                "hero_deaths",
+                "hero_kills_and_deaths",
                 "buybacks",
                 "building_destructions",
                 "roshan_kills",
                 "aegis_pickups",
                 "other_objectives",
             ):
-                for event in getattr(self.data.events, field) or []:
+                for row in getattr(self.report.events, field):
+                    event = row.fact
                     if not event.source_paths or any(
                         p.source not in self.sources for p in event.source_paths
                     ):
                         raise ValueError("Event refers to a source that was not read")
-            for event in self.data.events.first_blood.objective_events or []:
+            for event in self.report.events.first_blood.objective_events or []:
                 if not event.source_paths or any(
                     p.source not in self.sources for p in event.source_paths
                 ):
                     raise ValueError("Event refers to a source that was not read")
-        for conflict in self.data.coverage.conflicts:
+        for history in self.report.support_contributions.player_histories:
+            for event in (history.events or []) + (history.totals or []):
+                if not event.source_paths or any(
+                    p.source not in self.sources for p in event.source_paths
+                ):
+                    raise ValueError("Support fact refers to a source that was not read")
+        for conflict in self.report.coverage.conflicts:
             if any(source not in self.sources for source in conflict.sources):
                 raise ValueError("Conflict refers to a source that was not read")
         return self

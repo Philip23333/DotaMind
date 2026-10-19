@@ -275,15 +275,14 @@ async def test_product_composition_runs_search_resolve_and_detail_chain(
     assert rejected_read.error is not None
     assert rejected_read.error.code == "artifact_path_not_found"
     detail_document = await store.get(detail.content["artifact_ref"])
-    assert set(detail_document["data"]) == {
-        "match", "draft", "players", "economy", "builds", "events", "interactions", "coverage",
-    }
-    assert detail_document["data"]["match"]["duration_seconds"] == (
+    assert "data" not in detail_document
+    assert detail_document["report"]["overview"]["match"]["duration_seconds"] == (
         _fixture("opendota_game_9042720328.json")["duration"]
     )
-    assert detail_document["data"]["players"][0]["identity"]["hero"]["name_en"] == "Sven"
-    assert "match_id" not in detail_document["data"]
-    assert "version" not in detail_document["data"]
+    player = detail_document["report"]["player_statistics"]["final_players"][0]
+    assert player["identity"]["hero"]["name_en"] == "Sven"
+    assert "match_id" not in detail_document
+    assert "version" not in detail_document
     assert detail_document["unit_mapping_version"].startswith("sha256:")
     blocked = await registry.execute(_call("artifact.read", {
         "ref": detail.content["artifact_ref"], "mode": "read",
