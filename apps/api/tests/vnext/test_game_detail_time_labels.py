@@ -11,6 +11,7 @@ from app.integrations.valve.catalog_repository import DotaCatalogRepository
 from app.vnext.capabilities.game.data import (
     BuybackEvent,
     EconomyData,
+    EconomyMinute,
     FirstBloodData,
     GameDetailData,
     HeroDeath,
@@ -106,16 +107,20 @@ def test_minute_nodes_remain_required_integer_seconds_without_minute_buckets() -
             MinuteData(**arguments)
 
 
-def test_economy_labels_follow_only_the_verified_axis_including_empty_axis() -> None:
-    assert EconomyData().time_labels is None
-    assert EconomyData(time_seconds=[]).time_labels == []
-    economy = EconomyData(time_seconds=[0, 600, 3600])
-    assert economy.time_labels == ["00:00", "10:00", "60:00"]
+def test_economy_labels_are_bound_to_individual_minute_records() -> None:
+    assert EconomyData().minute_timeline is None
+    assert EconomyData(minute_timeline=[]).minute_timeline == []
+    economy = EconomyData(minute_timeline=[
+        EconomyMinute(time_seconds=t) for t in [0, 600, 3600]
+    ])
+    assert [n.time_label for n in economy.minute_timeline] == ["00:00", "10:00", "60:00"]
     assert EconomyData.model_validate_json(economy.model_dump_json()) == economy
     with pytest.raises(ValidationError, match="must match"):
-        EconomyData(time_seconds=[600], time_labels=["09:00"])
-    with pytest.raises(ValidationError, match="must match"):
-        EconomyData(time_seconds=None, time_labels=["00:00"])
+        EconomyMinute(time_seconds=600, time_label="09:00")
+    with pytest.raises(ValidationError):
+        EconomyMinute(time_seconds=None)
+    with pytest.raises(ValidationError):
+        EconomyData(time_seconds=[0], radiant_gold_adv=[1])
 
 
 def test_projection_does_not_invent_labels_for_unaligned_economy_or_missing_times() -> None:
@@ -128,9 +133,7 @@ def test_projection_does_not_invent_labels_for_unaligned_economy_or_missing_time
             )
         )
     )
-    assert data.economy.time_seconds is None
-    assert data.economy.time_labels is None
-    assert data.economy.radiant_gold_adv == [0, 10]
+    assert data.economy.model_dump() == {"minute_timeline": None}
     purchase = data.builds.players[1].purchase_events[0]
     assert purchase.time_seconds is None
     assert purchase.time_label is None
@@ -163,6 +166,9 @@ def test_time_labels_reach_the_public_tool_artifact_and_narrow_read() -> None:
     from tests.vnext.test_stratz_detail_projection import primary
 
     original = record(json.loads(FIXTURE.read_text()))
+    # Replay the sign/index error pattern through the public tool and Artifact query.
+    original.data["radiant_gold_adv"][1] = 113
+    original.data["radiant_xp_adv"][:2] = [100, -81]
 
     class Provider:
         async def get_game_record(self, match_id):
@@ -215,9 +221,27 @@ def test_time_labels_reach_the_public_tool_artifact_and_narrow_read() -> None:
                 arguments={"ref": ref, "mode": "read", "path": "data.match.duration_label"},
             )
         )
+        economy = await registry.execute(
+            ToolCall(
+                id="economy-minute",
+                name="artifact.query",
+                arguments={
+                    "ref": ref,
+                    "expression": "$.data.economy.minute_timeline[?@.time_seconds == 60]",
+                    "fields": ["time_seconds", "time_label", "radiant_gold_adv", "radiant_xp_adv"],
+                },
+            )
+        )
         assert node.status == duration.status == "ok"
         assert node.content["value"][0]["time_label"] == "20:00"
         assert node.content["value"][0]["time_seconds"] == 1200
         assert duration.content["value"] == "48:24"
+        assert economy.status == "ok"
+        assert economy.content["returned"] == 1
+        assert economy.content["next_offset"] is None
+        assert economy.content["matches"][0]["value"] == {
+            "time_seconds": 60, "time_label": "01:00",
+            "radiant_gold_adv": 113, "radiant_xp_adv": -81,
+        }
 
     asyncio.run(run())

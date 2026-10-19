@@ -79,6 +79,7 @@ overrides taking precedence:
 ```dotenv
 DOTAMIND_TOOL_INLINE_MAX_BYTES=12288
 DOTAMIND_TOOL_OBSERVATION_MAX_BYTES=35840
+DOTAMIND_ARTIFACT_QUERY_MAX_WORK=100000
 ```
 
 The first is the ordinary-result externalization threshold (12 KiB by default),
@@ -141,6 +142,17 @@ identities, or fetches a provider.
 
 `read` can select an exact scalar, object or list, but does not filter records by
 field values or select several fields in one operation.
+
+List reads return `offset`, requested `limit`, full list `total`, actual
+`returned`, `next_offset`, and `truncated` alongside `ref`, `path`, and `value`.
+After count and byte trimming, set `returned=len(value)` and
+`next_offset=offset+returned` only if more list items remain; otherwise use null.
+Continue with that exact `next_offset` and the same ref/path, not the requested
+limit. Empty and past-end pages have `returned=0`, `next_offset=null`, and
+`truncated=false`. A successful page must not be empty while more items remain;
+an oversized first item still requires a narrower path. Include continuation
+metadata in the serialized byte check. Non-list reads and outline results use
+null for `returned` and `next_offset`; outline arrays are not paginated reads.
 
 `grep` recursively searches member names and scalar values (strings, numbers,
 booleans and JSON null) throughout one referenced document. There is no search
@@ -257,13 +269,22 @@ an unsupported result shape rather than unwrapping, dropping or reinterpreting
 non-object matches. `fields` selects existing direct children of each record;
 requested objects/arrays retain their complete values subject to the byte bound.
 
-Initial complexity bounds are 16 segments per path (including relative filter
-paths), 32 comparison conditions, and logical nesting depth 8. The query document
-may contain at most 100000 JSON nodes, counting each container and scalar once.
-Check size without modifying the Artifact and fail when the cap is exceeded.
-These limits have deterministic boundary and saved-fixture checks; returning few matches
-does not bound the number of candidates
-examined. Keep existing tool timeout, stage deadline and cancellation controls;
+Complexity bounds are 16 segments per path (including relative filter paths),
+32 comparison conditions, and logical nesting depth 8. There is no whole-document
+node-count gate or pre-query recursive scan. Query traversal has a fresh budget
+per call, configured centrally by `DOTAMIND_ARTIFACT_QUERY_MAX_WORK` in `.env`
+(default 100000, strict positive integer), shared by execution and answer stages.
+Charge one work unit for each actual named-member/index lookup attempt (including
+misses), each visited array wildcard element, and each evaluated filter comparison
+or logical operator. Filter failures, intermediate traversal, skipped offset
+matches and pagination lookahead count too. Unvisited subtrees do not count;
+projecting direct fields does not recursively scan the selected records' other
+members. This is an operation budget, not an exact CPU, memory or serialization
+cost measure. Existing observation byte bounds still apply independently.
+On exhaustion, return `query_budget_exceeded` with `limit` and `used`, no partial
+result, and guidance to narrow the selected path/range rather than just fields.
+Do not mutate the Artifact. Returning few matches does not bound the number of
+candidates examined. Keep existing tool timeout, stage deadline and cancellation controls;
 do not describe a timeout as proof that a Python worker has been forcibly stopped.
 
 The implementation pins `python-jsonpath==2.2.1` and uses
@@ -273,7 +294,7 @@ parsed-syntax allowlist, rather than a new parser or query language. Its documen
 Strict RFC mode alone does not disable all features outside this subset.
 Array-only selector guards reject object enumeration. Evaluation runs in a worker
 thread so the caller/event loop can respond to timeout or cancellation; a cancelled
-await does not forcibly stop the worker. Finite AST/document limits still apply.
+await does not forcibly stop the worker. Finite AST and query-work limits still apply.
 See its [API](https://jg-rp.github.io/python-jsonpath/api/)
 and [iteration examples](https://jg-rp.github.io/python-jsonpath/quickstart/#finditerpath-data).
 
@@ -298,9 +319,30 @@ empty names; do not output an unusable continuation path or extend `read`
 silently. Projection changes only this observation, not the stored record.
 
 Preserve explicit null, zero, false, empty string and empty collection values.
-An absent requested member is omitted from `value` and listed in `missing_fields`;
-do not insert a synthetic null. A record with all requested fields missing is
-still a matched record with `value={}`. A valid query with no matches returns
+If a requested member is absent from every record on the actual returned page,
+fail the whole query with `invalid_arguments`, without a partial success payload.
+Determine this after count/byte admission: skipped matches, lookahead and rows
+removed by byte trimming do not establish a field's availability on this page.
+The error reports `missing_fields`, the first returned record's `sample_path`,
+and that sample's observed direct `available_fields`. These are observed names,
+not a universal schema or evidence that other records lack a fact. Inspect the
+sample or correct the projection and retry. This is a generic document check,
+not business-specific validation.
+
+Suggestions preserve source-key order and whole field names. At most 64 direct
+names from one sample are considered; `available_fields_truncated` marks omitted
+names. Error details must also fit the shared configured UTF-8 result bound:
+omit whole available names first, then whole missing names if necessary, marking
+`missing_fields_truncated` when that list is shortened. If metadata cannot fit,
+retain the error without oversized details, subject to the common result exit.
+No unrelated branches or nested field values are scanned for suggestions.
+
+When every requested member occurs in at least one record of this page, retain
+per-record absence semantics: omit an absent member from `value` and list it in
+that record's `missing_fields`; do not insert a synthetic null. A record with
+all requested fields missing can still have `value={}` when other page records
+provide those fields. Present null values count as present even if all are null.
+A valid query with no matches returns
 `matches=[]`, `returned=0`, `next_offset=null`, `truncated=false`; this proves only
 that the expression matched no records, not that the source fully covers the
 requested topic. Syntax/resource failures are not empty successes.
@@ -344,6 +386,7 @@ Reuse the existing error envelope and codes; the accepted mapping is:
 | --- | --- |
 | Unknown, invalid or unavailable-in-this-session reference | Existing `artifact_not_found`; do not reveal another session's existence |
 | Invalid arguments, unsupported expression/shape/path, or resource bound | `invalid_arguments`, with a safe reason identifying the failed condition |
+| A projected member absent from every actual returned-page record | `invalid_arguments`, bounded `missing_fields`, `sample_path`, `available_fields`; inspect/correct and retry, without inferring business absence |
 | Artifact storage/read failure | Preserve the existing Artifact error path, without replacing it with empty data |
 | Tool timeout or stage cancellation/deadline | Existing timeout/control handling, without claiming a complete query |
 

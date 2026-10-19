@@ -45,6 +45,12 @@ def render_runtime_prompt(
     """Render one runtime snapshot without reading or mutating runtime state."""
 
     if stage == "answer":
+        guidance = _ANSWER_GUIDANCE[context.time_pressure]
+        if context.tools_available:
+            guidance += (
+                "\nUse the declared local verification tools to recheck original fields. "
+                "External retrieval has ended, but local verification remains available."
+            )
         sections = [
             "Runtime state:",
             "",
@@ -58,7 +64,7 @@ def render_runtime_prompt(
             "yes" if context.tools_available else "no",
             "",
             "Guidance:",
-            _ANSWER_GUIDANCE[context.time_pressure],
+            guidance,
         ]
         return "\n".join([*sections, *_request_time_sections(context)])
 

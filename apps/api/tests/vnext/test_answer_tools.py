@@ -53,6 +53,18 @@ def _tool_response(calls):
     return ModelResponse(message=AssistantMessage(tool_calls=calls))
 
 
+@pytest.mark.parametrize("available", [False, True])
+def test_verification_controls_only_describe_the_current_availability(available):
+    session = AnswerToolSession(_registry() if available else ToolRegistry())
+    prompt = session.prompt()
+    assert f"Verification tools available: {'yes' if available else 'no'}" in prompt
+    assert ("No local verification tools are declared" in prompt) is not available
+    assert ("available now" in prompt) is available
+    assert "When tools are unavailable" not in prompt
+    expected = "math.calculate" if available else "none"
+    assert f"Declared verification tools: {expected}" in prompt
+
+
 def test_permissions_use_properties_not_tool_names():
     class Empty(BaseModel):
         pass
@@ -215,6 +227,11 @@ def test_runtime_rechecks_artifact_then_calculates_and_retains_history():
             "artifact.grep",
             "math.calculate",
         }
+        answer_prompt = "\n".join(
+            message.content for message in model.requests[1].messages if message.role == "system"
+        )
+        assert "The declared local verification tools are available now" in answer_prompt
+        assert "No local verification tools are declared" not in answer_prompt
         results = [m for m in model.requests[-1].messages if isinstance(m, ToolResultMessage)]
         assert results[0].content["value"] == [1010, 1478]
         assert results[1].content["label"] == "07:48"

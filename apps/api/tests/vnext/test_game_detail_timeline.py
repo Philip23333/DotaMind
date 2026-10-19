@@ -25,9 +25,9 @@ def test_saved_game_minutes_remain_distinct_from_final_statistics() -> None:
     }
     assert p.minute_timeline[-1].time_seconds == 2880
     assert data.match.duration_seconds == 2904
-    assert data.economy.time_seconds == raw["players"][0]["times"]
-    assert data.economy.radiant_gold_adv[-1] == -29518
-    assert data.economy.radiant_gold_adv == raw["radiant_gold_adv"]
+    assert [n.time_seconds for n in data.economy.minute_timeline] == raw["players"][0]["times"]
+    assert data.economy.minute_timeline[-1].radiant_gold_adv == -29518
+    assert [n.radiant_gold_adv for n in data.economy.minute_timeline] == raw["radiant_gold_adv"]
     assert "radiant_net_worth_adv" not in data.economy.model_dump()
 
 
@@ -51,7 +51,7 @@ def test_logs_include_pre_zero_and_equal_time_events_without_reordering_source()
     assert [n.known_deaths for n in nodes] == [0, 1, 1]
     assert [n.time_seconds for n in nodes] == [0, 60, 180]
     assert nodes[-1].kills != data.players[0].final_stats.kills
-    assert data.economy.time_seconds is None
+    assert data.economy.minute_timeline is None
     assert raw == before
 
 
@@ -84,7 +84,7 @@ def test_explicit_empty_player_axis_is_not_filled_from_final_stats() -> None:
     p = player(times=[], networth_t=[], gold_t=[], xp_t=[], lh_t=[], dn_t=[], kills=3)
     data = project(record(source(players=[p])))
     assert data.players[0].minute_timeline == []
-    assert data.economy.time_seconds == []
+    assert data.economy.minute_timeline == []
 
 
 def test_team_axis_requires_correspondence_not_just_equal_lengths() -> None:
@@ -92,13 +92,40 @@ def test_team_axis_requires_correspondence_not_just_equal_lengths() -> None:
         players=[player(), player(times=[0, 120])], radiant_gold_adv=[0, 5], radiant_xp_adv=[0, -10]
     )
     data = project(record(raw))
-    assert data.economy.time_seconds is None
-    assert data.economy.radiant_gold_adv == [0, 5]
-    assert data.economy.radiant_xp_adv == [0, -10]
-    assert any(m.path == "economy.time_seconds" and m.reason for m in data.coverage.missing)
+    assert data.economy.model_dump() == {"minute_timeline": None}
+    assert any(m.path == "economy.minute_timeline" and m.reason for m in data.coverage.missing)
     raw["players"][1]["times"] = [0, 60]
     aligned = project(record(raw))
-    assert aligned.economy.time_seconds == [0, 60]
+    assert [n.model_dump() for n in aligned.economy.minute_timeline] == [
+        {"time_seconds": 0, "time_label": "00:00", "radiant_gold_adv": 0, "radiant_xp_adv": 0},
+        {"time_seconds": 60, "time_label": "01:00", "radiant_gold_adv": 5, "radiant_xp_adv": -10},
+    ]
+
+
+@pytest.mark.parametrize("gold", [None, [367], [367, 735, 999], [367, True]])
+def test_team_metric_gaps_do_not_shift_time_or_discard_valid_experience(gold) -> None:
+    raw = source(players=[player()], radiant_gold_adv=gold, radiant_xp_adv=[100, -81])
+    original = deepcopy(raw)
+    data = project(record(raw))
+    nodes = data.economy.minute_timeline
+    assert [n.time_seconds for n in nodes] == [0, 60]
+    assert [n.radiant_xp_adv for n in nodes] == [100, -81]
+    expected_gold = [367, None] if gold == [367, True] else [None, None]
+    assert [n.radiant_gold_adv for n in nodes] == expected_gold
+    assert any(
+        m.path == "economy.minute_timeline.radiant_gold_adv" for m in data.coverage.missing
+    )
+    assert raw == original
+
+
+def test_team_axis_is_not_synthesized_from_series_lengths_or_missing_players() -> None:
+    data = project(record(source(players=[], radiant_gold_adv=[0, 1], radiant_xp_adv=[0, 2])))
+    assert data.economy.minute_timeline is None
+
+
+def test_all_unusable_team_metrics_do_not_create_empty_fact_rows() -> None:
+    data = project(record(source(players=[player()], radiant_gold_adv=None, radiant_xp_adv=[1])))
+    assert data.economy.minute_timeline is None
 
 
 def test_unknown_time_deaths_keep_final_total_and_do_not_erase_known_curve():

@@ -448,6 +448,7 @@ def _artifact_limits_from_env(file_values: dict[str, str | None]) -> ArtifactLim
     for name, field_name in (
         ("DOTAMIND_TOOL_INLINE_MAX_BYTES", "inline_max_bytes"),
         ("DOTAMIND_TOOL_OBSERVATION_MAX_BYTES", "observation_max_bytes"),
+        ("DOTAMIND_ARTIFACT_QUERY_MAX_WORK", "query_max_work"),
     ):
         default = getattr(defaults, field_name)
         raw_value = _env_value(name, str(default), file_values)
@@ -825,7 +826,9 @@ def build_vnext_registry(
     register_artifact_query_tool(
         registry,
         ArtifactQuerier(
-            artifact_store, observation_max_bytes=artifact_limits.observation_max_bytes
+            artifact_store,
+            observation_max_bytes=artifact_limits.observation_max_bytes,
+            max_work=artifact_limits.query_max_work,
         ),
     )
     if resolved_services.league_search is not None:

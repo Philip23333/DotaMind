@@ -6,7 +6,7 @@ from bisect import bisect_right
 from collections.abc import Mapping
 from typing import Any
 
-from app.vnext.capabilities.game.data import CoverageData, EconomyData, MinuteData
+from app.vnext.capabilities.game.data import CoverageData, EconomyData, EconomyMinute, MinuteData
 
 from .detail_values import _is_number, _missing
 
@@ -70,7 +70,7 @@ def project_minutes(
 def project_economy(
     source: Mapping[str, Any], players: list[dict] | None, coverage: CoverageData,
 ) -> EconomyData:
-    fields = {key: _series(source.get(key), f"economy.{key}", coverage)
+    fields = {key: _series(source.get(key), f"economy.minute_timeline.{key}", coverage)
               for key in ("radiant_gold_adv", "radiant_xp_adv")}
     axes = [_axis(player.get("times")) for player in players] if players else []
     axis = axes[0] if axes else None
@@ -80,10 +80,19 @@ def project_economy(
     aligned = (
         axis is not None and all(other == axis for other in axes)
         and all(time == i * 60 for i, time in enumerate(axis))
-        and all(values is not None and len(values) == len(axis) for values in fields.values())
     )
     if not aligned:
-        axis = None
-        _missing(coverage, "economy.time_seconds",
-                 "Cannot establish a shared source minute axis for both advantage series")
-    return EconomyData(time_seconds=axis, **fields)
+        _missing(coverage, "economy.minute_timeline",
+                 "Cannot establish a shared source zero-based minute axis")
+        return EconomyData()
+    for field, values in fields.items():
+        if values is not None and len(values) != len(axis):
+            _missing(coverage, f"economy.minute_timeline.{field}",
+                     "Source series length differs from the verified minute axis")
+            fields[field] = None
+    if all(values is None for values in fields.values()):
+        return EconomyData()
+    return EconomyData(minute_timeline=[EconomyMinute(
+        time_seconds=time,
+        **{field: None if values is None else values[i] for field, values in fields.items()},
+    ) for i, time in enumerate(axis)])

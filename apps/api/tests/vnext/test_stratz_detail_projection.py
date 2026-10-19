@@ -75,7 +75,7 @@ def test_explicit_objectives_do_not_count_gold_reason_as_roshan():
     assert data.events.first_blood.reported_time_seconds == 56
     assert data.events.first_blood.objective_events[0].time_seconds == 79
     assert any(c.values == [56, 79] for c in data.coverage.conflicts)
-    assert data.economy.radiant_gold_adv is None
+    assert data.economy.minute_timeline is None
 
 
 def test_supplement_uses_exact_player_association_and_preserves_income_not_net_worth():
@@ -89,7 +89,7 @@ def test_supplement_uses_exact_player_association_and_preserves_income_not_net_w
     assert "net_worth" not in node.model_dump() and "deaths" not in node.model_dump()
     assert data.match.score.dire == 33
     assert data.match.teams.radiant.name == "Team Spirit"
-    assert data.economy.radiant_gold_adv[-1] == -29518
+    assert data.economy.minute_timeline[-1].radiant_gold_adv == -29518
     assert len(data.events.roshan_kills) == 2
     assert all(e.source_paths[0].source == "opendota" for e in data.events.roshan_kills)
     assert not any(
@@ -104,6 +104,19 @@ def test_conflicting_player_identity_does_not_receive_someone_elses_minutes():
     data = project(record, extra)
     assert data.players[0].minute_timeline is None
     assert data.players[1].minute_timeline is not None
+
+
+def test_supplement_economy_marks_misaligned_metric_partial_without_losing_gold():
+    record = primary(9040460429)
+    extra = supplement(record)
+    extra.data["radiant_xp_adv"] = [100]
+    data = project(record, extra)
+    assert data.economy.minute_timeline[-1].radiant_gold_adv == -29518
+    assert all(n.radiant_xp_adv is None for n in data.economy.minute_timeline)
+    assert next(g for g in data.coverage.groups if g.path == "economy").status == "partial"
+    assert any(
+        m.path == "economy.minute_timeline.radiant_xp_adv" for m in data.coverage.missing
+    )
 
 
 def test_ambiguous_same_second_death_attributes_remain_unknown_without_dropping_fact():
@@ -161,7 +174,7 @@ def test_unavailable_supplement_is_explicit_and_never_zero_economy():
         units=UnitCatalog.load_default(),
         supplement_error="provider_timeout",
     )
-    assert data.economy.radiant_gold_adv is None
+    assert data.economy.minute_timeline is None
     groups = [g for g in data.coverage.groups if g.path == "economy"]
     assert groups[0].status == "unavailable" and groups[0].source_paths == []
     assert "provider_timeout" in groups[0].reason

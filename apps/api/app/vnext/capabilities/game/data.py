@@ -199,24 +199,14 @@ class PlayerData(_Data):
     minute_timeline: list[MinuteData] | None = None
 
 
-class EconomyData(_Data):
-    time_seconds: list[StrictInt] | None = None
-    time_labels: list[StrictStr] | None = Field(default=None, validate_default=True)
-    radiant_gold_adv: list[Number | None] | None = None
-    radiant_xp_adv: list[Number | None] | None = None
+class EconomyMinute(_TimedData):
+    time_seconds: StrictInt
+    radiant_gold_adv: Number | None = None
+    radiant_xp_adv: Number | None = None
 
-    @field_validator("time_labels")
-    @classmethod
-    def derive_time_labels(
-        cls,
-        labels: list[str] | None,
-        info: ValidationInfo,
-    ) -> list[str] | None:
-        axis = info.data.get("time_seconds")
-        expected = None if axis is None else [format_game_time(t) for t in axis]
-        if labels is not None and labels != expected:
-            raise ValueError("Time labels must match the seconds axis")
-        return expected
+
+class EconomyData(_Data):
+    minute_timeline: list[EconomyMinute] | None = None
 
 
 class FinalLoadout(_Data):

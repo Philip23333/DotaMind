@@ -31,10 +31,7 @@ async def _registry_with_document() -> tuple[ToolRegistry, str]:
     return await _registry_with_payload(
         {
             "resource": "tournament",
-            "rows": [
-                {"id": index, "games": [{"name": f"Game {index}"}]}
-                for index in range(60)
-            ],
+            "rows": [{"id": index, "games": [{"name": f"Game {index}"}]} for index in range(60)],
         }
     )
 
@@ -71,9 +68,12 @@ def test_artifact_read_schema_explains_granularity_choices() -> None:
     properties = schema["properties"]
 
     assert "narrowest useful read granularity" in registry.get("artifact.read").description
-    assert "parent collection such as rows" in properties["path"]["description"]
+    assert (
+        "parent collection only when complete records are needed"
+        in properties["path"]["description"]
+    )
     assert "six complete adjacent rows" in properties["offset"]["description"]
-    assert "one bounded parent-list read" in properties["limit"]["description"]
+    assert "use artifact.query when only selected fields" in properties["limit"]["description"]
     assert "actual number returned may be lower" in properties["limit"]["description"]
     assert "configured model observation-size budget" in registry.get("artifact.read").description
     assert "max_bytes" not in properties
@@ -88,9 +88,7 @@ def test_outline_and_explicit_read_modes_are_unambiguous() -> None:
     async def exercise():
         registry, ref = await _registry_with_document()
         outline = await registry.execute(_call({"ref": ref, "mode": "outline"}))
-        nested = await registry.execute(
-            _call({"ref": ref, "mode": "read", "path": "rows.0.games"})
-        )
+        nested = await registry.execute(_call({"ref": ref, "mode": "read", "path": "rows.0.games"}))
         return outline, nested
 
     outline, nested = asyncio.run(exercise())
@@ -271,14 +269,13 @@ def test_byte_budget_truncates_complete_list_rows_and_supports_continuation() ->
         first = await registry.execute(
             _call({"ref": ref, "mode": "read", "path": "rows", "offset": 0, "limit": 40})
         )
-        returned_count = len(first.content["value"])
         second = await registry.execute(
             _call(
                 {
                     "ref": ref,
                     "mode": "read",
                     "path": "rows",
-                    "offset": returned_count,
+                    "offset": first.content["next_offset"],
                     "limit": 40,
                 }
             )
@@ -292,21 +289,66 @@ def test_byte_budget_truncates_complete_list_rows_and_supports_continuation() ->
     assert first.content["offset"] == 0
     assert first.content["limit"] == 40
     assert first.content["truncated"] is True
+    assert first.content["returned"] == len(first.content["value"])
+    assert first.content["next_offset"] == first.content["returned"]
     assert serialized_size(first.content) <= MAX_MODEL_TOOL_OBSERVATION_BYTES
     assert all(set(row) == {"id", "name", "payload"} for row in first.content["value"])
     assert second.status == "ok"
     assert second.content["value"][0]["id"] == len(first.content["value"])
+    assert second.content["returned"] == len(second.content["value"])
+    assert second.content["next_offset"] == second.content["offset"] + second.content["returned"]
+
+
+@pytest.mark.parametrize("budget", [700, 1100])
+def test_next_offset_pages_cover_every_row_once_after_byte_trimming(budget):
+    async def run():
+        store = SessionArtifactStore()
+        ref = await store.put({"rows": [{"id": i, "text": "中" * 120} for i in range(10)]})
+        reader = ArtifactReader(store, observation_max_bytes=budget)
+        seen = []
+        offset = 0
+        pages = []
+        while True:
+            page = await reader.read(ref, "rows", offset=offset, limit=10)
+            assert serialized_size(page.model_dump(mode="json")) <= budget
+            assert page.returned == len(page.value) > 0
+            assert page.next_offset == (offset + page.returned if page.truncated else None)
+            seen.extend(row["id"] for row in page.value)
+            pages.append(page)
+            if page.next_offset is None:
+                break
+            assert page.next_offset > offset
+            offset = page.next_offset
+        assert seen == list(range(10))
+        assert pages[0].returned < pages[0].limit and pages[0].truncated
+        assert not pages[-1].truncated
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("offset", [0, 2, 3, 100])
+def test_read_continuation_handles_count_limits_empty_and_past_end(offset):
+    async def run():
+        store = SessionArtifactStore()
+        ref = await store.put({"rows": [0, 1, 2], "empty": [], "object": {"n": 1}})
+        reader = ArtifactReader(store)
+        page = await reader.read(ref, "rows", offset=offset, limit=2)
+        assert page.value == [0, 1, 2][offset : offset + 2]
+        assert page.returned == len(page.value)
+        assert page.next_offset == (2 if offset == 0 else None)
+        assert page.truncated is (offset == 0)
+        empty = await reader.read(ref, "empty")
+        assert empty.returned == 0 and empty.next_offset is None and not empty.truncated
+        for result in [await reader.read(ref, "object"), await reader.outline(ref)]:
+            assert result.returned is None and result.next_offset is None
+
+    asyncio.run(run())
 
 
 def test_byte_budget_uses_utf8_serialized_size() -> None:
     async def exercise():
         registry, ref = await _registry_with_payload(
-            {
-                "rows": [
-                    {"id": index, "payload": "中文内容" * 350}
-                    for index in range(30)
-                ]
-            }
+            {"rows": [{"id": index, "payload": "中文内容" * 350} for index in range(30)]}
         )
         return await registry.execute(
             _call({"ref": ref, "mode": "read", "path": "rows", "limit": 30})
@@ -320,9 +362,7 @@ def test_byte_budget_uses_utf8_serialized_size() -> None:
 
 def test_oversized_first_list_item_requires_narrower_path() -> None:
     async def exercise():
-        registry, ref = await _registry_with_payload(
-            {"rows": [{"id": 1, "payload": "x" * 40_000}]}
-        )
+        registry, ref = await _registry_with_payload({"rows": [{"id": 1, "payload": "x" * 40_000}]})
         return await registry.execute(
             _call({"ref": ref, "mode": "read", "path": "rows", "limit": 1})
         )
@@ -340,9 +380,7 @@ def test_oversized_non_list_values_are_rejected() -> None:
         registry, ref = await _registry_with_payload(
             {"large": {"payload": "x" * 40_000}, "large_text": "x" * 40_000}
         )
-        large_object = await registry.execute(
-            _call({"ref": ref, "mode": "read", "path": "large"})
-        )
+        large_object = await registry.execute(_call({"ref": ref, "mode": "read", "path": "large"}))
         large_scalar = await registry.execute(
             _call({"ref": ref, "mode": "read", "path": "large_text"})
         )
@@ -361,10 +399,7 @@ def test_reader_uses_custom_budget_for_outline_list_and_non_list_results() -> No
         store = SessionArtifactStore()
         ref = await store.put(
             {
-                "rows": [
-                    {"id": index, "payload": "x" * 150}
-                    for index in range(20)
-                ],
+                "rows": [{"id": index, "payload": "x" * 150} for index in range(20)],
                 "large_text": "x" * 1_000,
             }
         )
@@ -400,6 +435,8 @@ def test_small_scalar_read_remains_unchanged() -> None:
         "offset": None,
         "limit": None,
         "total": None,
+        "returned": None,
+        "next_offset": None,
         "truncated": False,
     }
 

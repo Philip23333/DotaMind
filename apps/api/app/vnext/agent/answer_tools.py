@@ -35,11 +35,20 @@ class AnswerToolSession:
         ]
 
     def prompt(self) -> str:
+        tools = self.schemas()
+        availability_guidance = (
+            "The declared local verification tools are available now. Use them to recheck "
+            "original Artifact fields; ending execution does not disable these tools."
+            if tools
+            else "No local verification tools are declared for this request. Answer from "
+            "supported evidence and state remaining verification gaps."
+        )
         return (
             f"{_PROMPT_PREFIX}\n"
             f"Calls attempted: {self.calls}\n"
             f"Admitted UTF-8 result bytes: {self.returned_bytes}\n"
-            f"Verification tools available: {'yes' if self.schemas() else 'no'}\n"
+            f"Verification tools available: {'yes' if tools else 'no'}\n"
+            f"Declared verification tools: {', '.join(tool.name for tool in tools) or 'none'}\n"
             "Only the declared local read-only and pure-computation tools are permitted. "
             "No new external data, task planning, or checkpoint writes. "
             "There is no total call or cumulative result-byte quota. "
@@ -50,7 +59,7 @@ class AnswerToolSession:
             "or earlier user turns do not count as answer-stage duplicates: you may repeat those "
             "exact calls to perform the required answer-stage verification. For a call already "
             "attempted in this answer stage, reuse its result or choose a different narrow read. "
-            "When tools are unavailable, answer from verified evidence and state remaining gaps."
+            f"{availability_guidance}"
         )
 
     @staticmethod

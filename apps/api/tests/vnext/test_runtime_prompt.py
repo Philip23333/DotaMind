@@ -70,10 +70,13 @@ def test_render_runtime_prompt_omits_remaining_turns_without_a_step_budget() -> 
 
 
 @pytest.mark.parametrize("pressure", ["healthy", "limited", "critical"])
-def test_answer_runtime_prompt_has_answer_guidance_and_no_tools(pressure: str) -> None:
+@pytest.mark.parametrize("tools_available", [False, True])
+def test_answer_runtime_prompt_matches_actual_tool_availability(
+    pressure: str, tools_available: bool,
+) -> None:
     context = RuntimeContext.from_state(
         current_step=22,
-        tools_available=False,
+        tools_available=tools_available,
         time_pressure=TimePressure(pressure),
     )
 
@@ -82,7 +85,8 @@ def test_answer_runtime_prompt_has_answer_guidance_and_no_tools(pressure: str) -
     assert "Stage:\nanswer" in prompt
     assert "Context pressure:" not in prompt
     assert f"Time pressure:\n{pressure}" in prompt
-    assert "Tools available:\nno" in prompt
+    assert f"Tools available:\n{'yes' if tools_available else 'no'}" in prompt
+    assert ("local verification remains available" in prompt) is tools_available
     assert "Remaining turns:" not in prompt
     assert "continue gathering information" not in prompt
     assert "Use additional tools" not in prompt

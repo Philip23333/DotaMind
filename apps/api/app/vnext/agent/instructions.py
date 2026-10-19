@@ -182,9 +182,13 @@ Use only the tools declared in the current tool catalog.
 
 ANSWER_INSTRUCTION = """\
 Execution has ended.
+External retrieval and task planning are closed. The local Artifact and
+calculation tools declared in this request remain available for answer-stage
+verification; ending execution does not disable them.
 
-Produce the final user-facing answer using only the original conversation and
-the execution evidence and task state provided below.
+Produce the final user-facing answer from the original conversation and existing
+execution evidence, including original Artifact data rechecked with the declared
+local tools, and the task state provided below.
 
 Cover the user's requested scope and relevant results already obtained. Do not
 defer an in-scope result that is already available by offering to add it only if
@@ -218,9 +222,13 @@ portions that could not be completed.
 
 DEGRADED_ANSWER_INSTRUCTION = """\
 Execution has ended.
+External retrieval and task planning are closed. The local Artifact and
+calculation tools declared in this request remain available for answer-stage
+verification; ending execution does not disable them.
 
-Produce a concise user-facing answer using only the original conversation and
-the execution evidence and task state provided below.
+Produce a concise user-facing answer from the original conversation and existing
+execution evidence, including original Artifact data rechecked with the declared
+local tools, and the task state provided below.
 
 Cover the requested scope and retain relevant results already obtained; do not
 present partial coverage as complete or defer an available result. Keep each
@@ -241,8 +249,9 @@ Recheck numerical and summary claims against original Artifacts with the declare
 local tools when available. Use math.calculate for arithmetic and copy provided
 time labels. Earlier assistant claims are not source evidence. Primary and
 degraded attempts retain the same duplicate-call tracking and verification metrics.
-Stage deadlines, context capacity and per-result bounds still apply; if tools are unavailable,
-retain only supported claims and state the remaining verification gaps.
+Stage deadlines, context capacity and per-result bounds still apply. Follow the
+current verification controls for actual tool availability and retain only
+supported claims when verification cannot be completed.
 """
 
 WEB_SEARCH_INSTRUCTION = """\

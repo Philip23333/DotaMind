@@ -31,6 +31,8 @@ class ArtifactReadResult(BaseModel):
     offset: int | None = None
     limit: int | None = None
     total: int | None = None
+    returned: int | None = None
+    next_offset: int | None = None
     truncated: bool = False
 
 
@@ -86,13 +88,16 @@ class ArtifactReader:
             resolved_limit = 50 if limit is None else limit
             _validate_pagination(resolved_offset, resolved_limit)
             end = resolved_offset + resolved_limit
+            selected = value[resolved_offset:end]
             result = ArtifactReadResult(
                 ref=ref,
                 path=path,
-                value=value[resolved_offset:end],
+                value=selected,
                 offset=resolved_offset,
                 limit=resolved_limit,
                 total=len(value),
+                returned=len(selected),
+                next_offset=end if end < len(value) else None,
                 truncated=end < len(value),
             )
             return _fit_list_result_to_model_budget(result, self._observation_max_bytes)
@@ -115,9 +120,7 @@ def _validate_pagination(offset: int, limit: int) -> None:
     if offset < 0:
         raise ArtifactReadValidationError("offset must be non-negative")
     if limit < 1 or limit > ArtifactReader.MAX_LIMIT:
-        raise ArtifactReadValidationError(
-            f"limit must be between 1 and {ArtifactReader.MAX_LIMIT}"
-        )
+        raise ArtifactReadValidationError(f"limit must be between 1 and {ArtifactReader.MAX_LIMIT}")
 
 
 def _fit_result_to_model_budget(
@@ -129,8 +132,21 @@ def _fit_result_to_model_budget(
     if serialized_size(result.model_dump(mode="json")) <= max_bytes:
         return result
     raise ArtifactReadValidationError(
-        "selected artifact value exceeds the model observation budget; "
-        "read a narrower nested path"
+        "selected artifact value exceeds the model observation budget; read a narrower nested path"
+    )
+
+
+def _with_list_page(result: ArtifactReadResult, value: list[Any]) -> ArtifactReadResult:
+    assert result.offset is not None and result.total is not None
+    end = result.offset + len(value)
+    more = end < result.total
+    return result.model_copy(
+        update={
+            "value": value,
+            "returned": len(value),
+            "next_offset": end if more else None,
+            "truncated": more,
+        }
     )
 
 
@@ -143,20 +159,19 @@ def _fit_list_result_to_model_budget(
     if serialized_size(result.model_dump(mode="json")) <= max_bytes:
         return result
 
-    empty_result = result.model_copy(update={"value": [], "truncated": True})
+    empty_result = _with_list_page(result, [])
     if serialized_size(empty_result.model_dump(mode="json")) > max_bytes:
         return _fit_result_to_model_budget(empty_result, max_bytes)
 
     candidate = list(result.value)
     while candidate:
-        fitted = result.model_copy(update={"value": candidate, "truncated": True})
+        fitted = _with_list_page(result, candidate)
         if serialized_size(fitted.model_dump(mode="json")) <= max_bytes:
             return fitted
         candidate.pop()
 
     raise ArtifactReadValidationError(
-        "selected artifact item exceeds the model observation budget; "
-        "read a narrower nested path"
+        "selected artifact item exceeds the model observation budget; read a narrower nested path"
     )
 
 

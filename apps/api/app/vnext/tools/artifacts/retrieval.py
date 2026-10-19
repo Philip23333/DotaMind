@@ -27,9 +27,9 @@ class ArtifactReadInput(DomainModel):
     path: str | None = Field(
         default=None,
         description=(
-            "Dotted path to read. Use an exact nested path for one value, such as "
-            "rows.3.results, or a parent collection such as rows when several adjacent "
-            "complete rows are needed."
+            "Dotted path to a complete value or object, such as rows.3.results. "
+            "Read a parent collection only when complete records are needed; use "
+            "artifact.query to extract selected fields across records."
         ),
     )
     offset: int | None = Field(
@@ -37,7 +37,8 @@ class ArtifactReadInput(DomainModel):
         ge=0,
         description=(
             "Start index when the selected path is a list. For example, path='rows', "
-            "offset=0, limit=6 reads six complete adjacent rows in one call."
+            "offset=0, limit=6 requests up to six complete adjacent rows. "
+            "Continue from the returned next_offset rather than offset plus limit."
         ),
     )
     limit: int | None = Field(
@@ -46,8 +47,9 @@ class ArtifactReadInput(DomainModel):
         le=100,
         description=(
             "Maximum logical items from the selected list; the actual number returned may be "
-            "lower because of the configured model observation-size budget. Prefer one bounded "
-            "parent-list read over many sibling reads when several adjacent rows are required."
+            "lower because of the configured model observation-size budget. Use a bounded "
+            "parent-list read for complete adjacent records; use artifact.query when only "
+            "selected fields across records are needed."
         ),
     )
     task_key: str | None = Field(
@@ -137,8 +139,9 @@ def register_artifact_tools(
                 "Returns original read paths, value_type and previews; containers show type "
                 "and direct item count only. Results are count- and byte-bounded: follow "
                 "next_offset with the same ref/pattern, since returned may be below limit. "
-                "Use grep to discover fields/content, read for known paths, "
-                "query to select records."
+                "Use grep to locate unknown fields/content, read for a complete value or object "
+                "at a known path, and query to filter records or extract selected fields "
+                "across records, even without a filter."
             ),
             input_model=ArtifactGrepInput,
             output_model=ArtifactGrepResult,
@@ -152,24 +155,30 @@ def register_artifact_tools(
         ToolDefinition(
             name="artifact.read",
             description=(
-                "Read one exact manual or temporary tool-response artifact. Use mode='outline' "
+                "Inspect document structure or read a complete value or object at a known path "
+                "in one exact manual or temporary tool-response artifact. Use artifact.grep "
+                "to locate unknown fields/content. Use artifact.query to filter records or "
+                "extract selected fields across records, even without a filter; avoid reading "
+                "complete records when only a few fields are needed. Use mode='outline' "
                 "to inspect root structure; do not provide path, offset, or limit in outline mode. "
                 "Use mode='read' with one required dotted path to read a value. If a tool response "
                 "contains _artifact_path, copy it exactly into path with mode='read'. "
                 "When _artifact_path is already provided, use mode='read' directly. "
                 "Outline is only needed when the document structure is unknown. "
                 "Choose the narrowest useful read granularity. If you need one nested value from "
-                "one row, read that exact path, such as rows.3.results. If you need the same "
-                "evidence across several adjacent rows, prefer reading the parent rows collection "
-                "once with offset/limit instead of issuing many sibling reads such as "
-                "rows.0.results, rows.0.opponents, rows.1.results, rows.1.opponents. The stored "
+                "one row, read that exact path, such as rows.3.results. If you need complete "
+                "adjacent records, read their parent collection with offset/limit. If you need "
+                "only selected fields across records, use artifact.query. The stored "
                 "artifact contains the complete logical tool response, so a parent row/list read "
                 "can expose data replaced by _artifact_path pointers in the bounded preview. "
                 "Offset and limit bound a list logically, but artifact reads also have a "
                 "configured "
                 "model observation-size budget, so fewer complete items than limit may be "
                 "returned. "
-                "When continuing, advance offset by the number of items actually returned. If one "
+                "List results include returned (the actual item count) and next_offset. "
+                "Continue with the same ref/path and offset=next_offset until it is null; "
+                "do not advance by the requested limit. Both fields are null for non-list reads "
+                "and outline mode. If one "
                 "selected value or item is too large, read a narrower nested path."
             ),
             input_model=ArtifactReadInput,

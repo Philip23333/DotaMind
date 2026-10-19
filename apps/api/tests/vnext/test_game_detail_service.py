@@ -150,7 +150,7 @@ def test_supplement_unavailability_preserves_primary_and_has_no_successful_sourc
     result = asyncio.run(service.get_game_detail(GameDetailInput(valve_game_id=_MATCH_ID)))
     assert result.provider == "stratz" and set(result.sources) == {"stratz"}
     assert result.data.players[0].identity.hero.id == 1
-    assert result.data.economy.radiant_gold_adv is None
+    assert result.data.economy.minute_timeline is None
     assert result.data.events.roshan_kills is None
     assert primary.calls == extra.calls == [_MATCH_ID]
     assert any(code in (g.reason or "") for g in result.data.coverage.groups)

@@ -18,6 +18,7 @@ from app.vnext.tools.definition import ToolDefinition
 _BUDGET_ENV_NAMES = (
     "DOTAMIND_TOOL_INLINE_MAX_BYTES",
     "DOTAMIND_TOOL_OBSERVATION_MAX_BYTES",
+    "DOTAMIND_ARTIFACT_QUERY_MAX_WORK",
 )
 
 
@@ -33,6 +34,7 @@ def test_defaults_preserve_existing_artifact_budgets() -> None:
 
     assert limits.inline_max_bytes == 12 * 1024
     assert limits.observation_max_bytes == 35 * 1024
+    assert limits.query_max_work == 100000
 
 
 @pytest.mark.parametrize("budget", [1500, 65536])
@@ -102,9 +104,10 @@ def test_environment_budget_reaches_all_retrieval_tools_and_both_stage_exits(
     "value",
     [True, False, 0, -1, 1.5, "12288"],
 )
-def test_artifact_limits_require_strict_positive_integers(value: object) -> None:
+@pytest.mark.parametrize("field", ["inline_max_bytes", "observation_max_bytes", "query_max_work"])
+def test_artifact_limits_require_strict_positive_integers(value: object, field: str) -> None:
     with pytest.raises(ValueError):
-        ArtifactLimits(inline_max_bytes=value)  # type: ignore[arg-type]
+        ArtifactLimits(**{field: value})
 
 
 def test_artifact_limits_require_inline_budget_not_to_exceed_observation() -> None:
@@ -130,15 +133,19 @@ def test_from_env_reads_file_and_process_environment_takes_precedence(
     _isolate_configuration(monkeypatch, tmp_path)
     env_path = tmp_path / ".env"
     env_path.write_text(
-        "DOTAMIND_TOOL_INLINE_MAX_BYTES=7000\nDOTAMIND_TOOL_OBSERVATION_MAX_BYTES=9000\n",
+        "DOTAMIND_TOOL_INLINE_MAX_BYTES=7000\nDOTAMIND_TOOL_OBSERVATION_MAX_BYTES=9000\n"
+        "DOTAMIND_ARTIFACT_QUERY_MAX_WORK=200\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(composition, "_VNEXT_ENV_PATH", env_path)
     monkeypatch.setenv("DOTAMIND_TOOL_INLINE_MAX_BYTES", "6000")
+    monkeypatch.setenv("DOTAMIND_ARTIFACT_QUERY_MAX_WORK", "150")
 
     limits = VNextSettings.from_env().artifact_limits
 
-    assert limits == ArtifactLimits(inline_max_bytes=6000, observation_max_bytes=9000)
+    assert limits == ArtifactLimits(
+        inline_max_bytes=6000, observation_max_bytes=9000, query_max_work=150
+    )
 
 
 @pytest.mark.parametrize(
@@ -152,6 +159,11 @@ def test_from_env_reads_file_and_process_environment_takes_precedence(
         ("DOTAMIND_TOOL_OBSERVATION_MAX_BYTES", " "),
         ("DOTAMIND_TOOL_OBSERVATION_MAX_BYTES", "true"),
         ("DOTAMIND_TOOL_OBSERVATION_MAX_BYTES", "0"),
+        ("DOTAMIND_ARTIFACT_QUERY_MAX_WORK", "0"),
+        ("DOTAMIND_ARTIFACT_QUERY_MAX_WORK", "-1"),
+        ("DOTAMIND_ARTIFACT_QUERY_MAX_WORK", "1.5"),
+        ("DOTAMIND_ARTIFACT_QUERY_MAX_WORK", "true"),
+        ("DOTAMIND_ARTIFACT_QUERY_MAX_WORK", ""),
     ],
 )
 def test_from_env_rejects_invalid_artifact_budgets(
@@ -218,6 +230,49 @@ def _match_registry(settings: VNextSettings):
 
 def _execute(registry, call: ToolCall):
     return asyncio.run(registry.execute(call))
+
+
+def test_query_work_environment_reaches_execution_and_answer_tools(monkeypatch, tmp_path):
+    _isolate_configuration(monkeypatch, tmp_path)
+    env_path = tmp_path / ".env"
+    env_path.write_text("DOTAMIND_ARTIFACT_QUERY_MAX_WORK=3\n", encoding="utf-8")
+    monkeypatch.setattr(composition, "_VNEXT_ENV_PATH", env_path)
+    settings = VNextSettings.from_env()
+    assert settings.artifact_limits.query_max_work == 3
+    registry = _match_registry(settings)
+
+    async def run():
+        seed = await registry.execute(
+            ToolCall(id="seed-work", name="esports.match.search", arguments={})
+        )
+        ref = seed.content["artifact_ref"]
+        call = ToolCall(
+            id="query-work",
+            name="artifact.query",
+            arguments={
+                "ref": ref,
+                "expression": "$.items[*]",
+                "fields": ["id"],
+            },
+        )
+        execution = await registry.execute(call)
+        answer = await AnswerToolSession(registry).execute(call, timeout=1)
+        assert execution.error == answer.error
+        assert execution.error.code == "query_budget_exceeded"
+        assert execution.error.details == {"limit": 3, "used": 3}
+        narrow = call.model_copy(
+            update={
+                "id": "query-narrow",
+                "arguments": {
+                    **call.arguments,
+                    "expression": "$.items[0]",
+                },
+            }
+        )
+        result = await registry.execute(narrow)
+        assert result.status == "ok" and result.content["returned"] == 1
+
+    asyncio.run(run())
 
 
 def test_composition_injects_environment_limits_into_externalization_and_reads(

@@ -18,6 +18,7 @@ ToolErrorCode = Literal[
     "artifact_not_found",
     "artifact_path_not_found",
     "artifact_type_mismatch",
+    "query_budget_exceeded",
     "unsupported_resource",
     "unsupported_scope",
     "unsupported_field",

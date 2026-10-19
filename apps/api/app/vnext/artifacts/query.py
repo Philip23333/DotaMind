@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+from itertools import islice
 from typing import Any
 
 from jsonpath import JSONPathEnvironment
@@ -36,13 +37,15 @@ class ArtifactQueryInput(BaseModel):
         min_length=1,
         max_length=1024,
         description="Restricted JSONPath: named members, nonnegative indexes, array [*], "
-        "and [?@.field == literal] filters with comparisons, &&, || and parentheses.",
+        "and optional [?@.field == literal] filters with comparisons, &&, || and parentheses. "
+        "Use $.data.players[*] to project all player records without a filter.",
     )
     fields: list[StrictStr] = Field(
         min_length=1,
         max_length=16,
         description="Distinct literal direct member names, including identity/time/labels "
-        "needed for verification. No aliases, nested projection or inferred parent fields.",
+        "needed for verification. Use observed record fields; inspect a sample with read "
+        "when unknown. No aliases, nested projection or inferred parent fields.",
     )
     offset: int = Field(
         default=0,
@@ -81,11 +84,62 @@ class ArtifactQueryResult(BaseModel):
     truncated: bool
 
 
+class QueryBudgetExceeded(Exception):
+    """Evaluation stopped before exceeding its per-query work budget."""
+
+    def __init__(self, limit: int, used: int):
+        super().__init__("query evaluation work limit exceeded; narrow the selected path or range")
+        self.limit = limit
+        self.used = used
+
+
+class QueryFieldsUnavailable(ArtifactReadValidationError):
+    """Requested fields absent from every record admitted to this page."""
+
+    def __init__(self, missing_fields: list[str], sample_path: str, sample: dict):
+        super().__init__(
+            "Requested fields do not occur in this page's matched records; "
+            "inspect the sample's available fields and retry. "
+            "This does not establish absence from other records or business facts."
+        )
+        keys = list(islice(sample, 65))
+        self.details = {
+            "missing_fields": missing_fields,
+            "sample_path": sample_path,
+            "available_fields": keys[:64],
+            "available_fields_truncated": len(keys) > 64,
+        }
+
+
+class _QueryEnvironment(JSONPathEnvironment):
+    def __init__(self, max_work: int):
+        super().__init__(strict=True, filter_caching=False)
+        self.max_work = max_work
+        self.used_work = 0
+
+    def charge(self) -> None:
+        if self.used_work >= self.max_work:
+            raise QueryBudgetExceeded(self.max_work, self.used_work)
+        self.used_work += 1
+
+    def getitem(self, obj, key):
+        # Charge attempts too, including missing fields and indexes.
+        self.charge()
+        return super().getitem(obj, key)
+
+    def compare(self, left, operator, right):
+        # Every allowed filter requires comparisons, even with no matches.
+        self.charge()
+        return super().compare(left, operator, right)
+
+
 class _ArrayWildcard(WildcardSelector):
     def resolve(self, node):
         if isinstance(node.obj, dict):
             raise ArtifactReadValidationError("wildcard traversal is allowed only on arrays")
-        yield from super().resolve(node)
+        for match in super().resolve(node):
+            self.env.charge()
+            yield match
 
 
 class _ArrayFilter(Filter):
@@ -95,8 +149,8 @@ class _ArrayFilter(Filter):
         yield from super().resolve(node)
 
 
-def _compile(expression: str) -> JSONPath:
-    env = JSONPathEnvironment(strict=True, filter_caching=False)
+def _compile(expression: str, max_work: int) -> JSONPath:
+    env = _QueryEnvironment(max_work)
     path = env.compile(expression)
     comparisons = 0
 
@@ -161,35 +215,19 @@ def _compile(expression: str) -> JSONPath:
     return path
 
 
-def _check_document(document: Any) -> None:
-    stack = [iter((document,))]
-    nodes = 0
-    while stack:
-        try:
-            value = next(stack[-1])
-        except StopIteration:
-            stack.pop()
-            continue
-        nodes += 1
-        if nodes > 100_000:
-            raise ArtifactReadValidationError("query document exceeds 100000 JSON nodes")
-        if isinstance(value, dict):
-            stack.append(iter(value.values()))
-        elif isinstance(value, list):
-            stack.append(iter(value))
-
-
 def _record_path(parts) -> str:
     if not parts or any(isinstance(part, str) and (not part or "." in part) for part in parts):
         raise ArtifactReadValidationError("selected location is unsupported by artifact.read paths")
     return ".".join(str(part) for part in parts)
 
 
-def _evaluate(document: Any, args: ArtifactQueryInput, max_bytes: int) -> ArtifactQueryResult:
+def _evaluate(
+    document: Any, args: ArtifactQueryInput, max_bytes: int, max_work: int
+) -> ArtifactQueryResult:
     try:
-        path = _compile(args.expression)
-        _check_document(document)
+        path = _compile(args.expression, max_work)
         matches = []
+        sample = None
         more = False
         for index, match in enumerate(path.finditer(document)):
             if not isinstance(match.obj, dict):
@@ -200,6 +238,8 @@ def _evaluate(document: Any, args: ArtifactQueryInput, max_bytes: int) -> Artifa
             if len(matches) == args.limit:
                 more = True
                 break
+            if not matches:
+                sample = match.obj
             matches.append(
                 ArtifactQueryMatch(
                     path=location,
@@ -224,6 +264,12 @@ def _evaluate(document: Any, args: ArtifactQueryInput, max_bytes: int) -> Artifa
                 raise ArtifactReadValidationError(
                     "continuation exceeds offset range; narrow the query"
                 )
+            absent = [
+                key for key in args.fields
+                if matches and all(key not in match.value for match in matches)
+            ]
+            if absent:
+                raise QueryFieldsUnavailable(absent, matches[0].path, sample)
             return result
         if len(matches) <= 1:
             raise ArtifactReadValidationError(
@@ -240,12 +286,16 @@ class ArtifactQuerier:
         store: SessionArtifactStore,
         *,
         observation_max_bytes: int = DEFAULT_ARTIFACT_LIMITS.observation_max_bytes,
+        max_work: int = DEFAULT_ARTIFACT_LIMITS.query_max_work,
     ):
+        if type(max_work) is not int or max_work <= 0:
+            raise ValueError("max_work must be a positive integer")
         self._store = store
         self._max_bytes = observation_max_bytes
+        self._max_work = max_work
 
     async def query(self, args: ArtifactQueryInput) -> ArtifactQueryResult:
         document = await self._store.get(args.ref)
         # Keep the event loop cancellable. A cancelled await does not forcibly
-        # stop its worker; AST/document limits bound the finite evaluation.
-        return await asyncio.to_thread(_evaluate, document, args, self._max_bytes)
+        # stop its worker; AST/work limits bound query traversal and comparisons.
+        return await asyncio.to_thread(_evaluate, document, args, self._max_bytes, self._max_work)

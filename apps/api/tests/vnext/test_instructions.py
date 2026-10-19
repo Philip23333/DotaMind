@@ -96,7 +96,7 @@ def test_historical_deferred_receipts_are_not_evidence_or_checkpoint_sources() -
     assert "historical deferred receipts from older runs" in instruction
     assert "not evidence or checkpoint sources" in instruction
     assert (
-        "does not release or replace the tool results retained in effective conversation history"
+        "does not release or replace tool results retained in effective history"
         in instruction
     )
     assert "successful inline tool results" in instruction
@@ -145,6 +145,8 @@ def test_answer_instructions_keep_requested_coverage_and_uncertainty() -> None:
         assert "do not promote" in normalized or "do not promote an inference" in normalized
         assert "source-reported absence" in normalized
         assert "not yet been checked" in normalized or "ranges not yet checked" in normalized
+        assert "ending execution does not disable them" in normalized
+        assert "original artifact data rechecked with the declared local tools" in normalized
 
     main = " ".join(ANSWER_INSTRUCTION.lower().split())
     assert "complete lists" in main

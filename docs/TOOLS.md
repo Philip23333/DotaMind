@@ -163,6 +163,13 @@ verification may use it. Answers follow the same stage permissions,
 per-result bounds, deadlines and context governance; query adds no call or
 cumulative byte quota.
 
+Query limits actual traversal/comparison work per call using
+`DOTAMIND_ARTIFACT_QUERY_MAX_WORK` (default 100000) from the shared `.env`
+configuration. Unrelated document branches are not scanned or counted. Work
+exhaustion returns `query_budget_exceeded`, without partial matches; narrow the
+selected path/range. This is separate from the shared observation byte limit
+and pagination, which continue to apply in both stages.
+
 For Larl's `20:00`, `25:00`, `30:00` samples, an illustrative target expression is:
 
 ```text
@@ -441,10 +448,24 @@ direct item count. Limit defaults to 20 and is at most 100; preview is at most
 actual returned count; a single match/envelope that cannot fit fails explicitly.
 
 The simplified interface and paging/shared budget are implemented with deterministic
-checks. Use grep for discovery, read for exact paths, query for
-conditional record selection. The complete contract is owned by
+checks. Use grep to locate unknown fields/content, read to inspect structure or
+retrieve a complete value/object at a known path, and query to filter records or
+extract selected fields across records, even without a filter. Prefer query
+when only part of each record is needed: `expression="$.data.players[*]"` with
+`fields=["identity", "final_stats"]` retrieves player final statistics without
+their unrelated minute histories. Parent-list reads are appropriate when complete
+adjacent records are needed. The complete contract is owned by
 [ARTIFACTS.md](ARTIFACTS.md#retrieval-contract). No new zero-match prompt rule is
 part of this target.
+
+For query projections, a field absent from every record admitted to the actual
+returned page fails the whole call with `invalid_arguments`. Bounded error
+details give `missing_fields`, a `sample_path` and the sample's observed direct
+`available_fields` for inspection/retry. Suggestions do not assert a universal
+schema or that a business fact is absent. Partial per-record omissions continue
+to use `missing_fields`; present null stays null; zero matches remains a normal
+empty result without field-existence validation. The configured result bound
+also applies to error hints; shortened name lists carry truncation flags.
 
 `artifact.read` reads one exact reference using an explicit mode:
 
@@ -456,6 +477,12 @@ artifact.read(ref, mode="outline")
 artifact.read(ref, mode="read", path=..., offset?, limit?)
   Read one explicit dotted path. Offset and limit slice only a selected list.
 ```
+
+List-read results report actual `returned` and a program-generated `next_offset`
+after byte trimming. Continue with the same ref/path and `offset=next_offset`
+until null; requested `limit` is not the returned count. Both continuation
+fields are null for non-list reads and outline mode. Empty/past-end list pages
+return zero items, null continuation, and no truncation.
 
 If a previous tool result provides `_artifact_path`, copy it exactly and use
 `mode="read"` directly. The Artifact layer does not fetch providers, infer

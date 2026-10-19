@@ -35,8 +35,10 @@ another Provider lookup to fill these predefined supplemental groups.
 Label-resource versions are separate from match-source provenance.
 data.match.match_date is the Beijing calendar date (Asia/Shanghai), so it may differ
 from a source UTC date. data.match.score contains Radiant/Dire hero-kill counts, not
-series game wins. data.economy.radiant_gold_adv preserves the source gold-advantage
-metric; do not relabel it as a net-worth difference.
+series game wins. data.economy.minute_timeline contains records with time_seconds,
+time_label, radiant_gold_adv and radiant_xp_adv bound to the same minute. Query by
+time_seconds rather than aligning separate arrays. radiant_gold_adv preserves the
+source gold-advantage metric; do not relabel it as a net-worth difference.
 players[].minute_timeline.cumulative_gold_earned is cumulative earned income,
 not wallet balance or remaining net worth; cumulative_experience is cumulative XP.
 Minute net_worth is intentionally excluded. final_stats.earned_gold_net_worth_gap
@@ -51,6 +53,8 @@ source observations. Purchases do not prove assembly, delivery or inventory.
 Use explicit objective events: a gold reason named ROSHAN is not a Roshan kill.
 Game-relative time fields include program-generated display labels such as
 time_label and duration_label (MM:SS, preserving negative and fractional seconds).
+Minute timelines and event lists contain records with their own time_seconds and
+time_label; do not align timestamps with a separate array of metric values.
 Use these labels for display; use the original seconds to match, sort, or calculate.
 
 Missing fields or unconvertible identifiers do not mean an event did not occur

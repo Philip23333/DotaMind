@@ -163,13 +163,12 @@ def project_detail(
         "economy",
         "radiant_gold_adv",
         data.economy
-        if extra is not None
-        and any(
-            series is not None
-            for series in (data.economy.radiant_gold_adv, data.economy.radiant_xp_adv)
-        )
+        if extra is not None and data.economy.minute_timeline is not None
         else None,
-        partial=extra is not None and extra.economy.time_seconds is None,
+        partial=any(
+            node.radiant_gold_adv is None or node.radiant_xp_adv is None
+            for node in data.economy.minute_timeline or []
+        ),
     )
     for category in ("building_destructions", "roshan_kills", "aegis_pickups"):
         value = deepcopy(getattr(extra.events, category)) if extra and extra.events else None

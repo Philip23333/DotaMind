@@ -179,8 +179,13 @@ Also verify:
   projected records; first-record/envelope overflow and offset-cap continuation
   fail rather than returning a misleading empty/complete page. An empty final
   page is a valid non-truncated success when the query genuinely has no later row.
-- Accepted expression, path, comparison/nesting, field, pagination and document
-  node limits are enforced before an unbounded query proceeds. Validate the
+- Accepted expression, path, comparison/nesting, field and pagination limits
+  remain enforced. Query-work accounting bounds member/index lookup attempts,
+  wildcard elements and filter comparisons/logic, including misses, intermediate
+  traversal, offsets and lookahead. Large unvisited subtrees must not block narrow
+  queries. Exhaustion returns `query_budget_exceeded` with no partial result;
+  `.env` configuration reaches both stages, and concurrent calls have independent
+  budgets. Validate the
   selected library's AST allowlist, lazy iteration and compatibility against the
   actual pinned version. Strict RFC mode alone is insufficient evidence.
 - Unknown/cross-session refs, storage failures, timeout/cancellation, current
@@ -680,7 +685,9 @@ missing versus explicit empty collections using saved game `9040460429`.
 Minute tests additionally cover inclusive/pre-zero event accumulation, missing
 and malformed logs, duplicate or unsorted time axes, short metric arrays,
 explicit empty curves, real 600-second values, and team-axis correspondence.
-They retain raw advantage values when their time axis cannot be established.
+Team advantages are time-bound records; an unverified axis yields an unavailable
+timeline, and a mismatched metric becomes null without truncating valid metrics.
+The public DTO never retains a second route to unbound time/value arrays.
 Event/interaction tests also check 50 deaths, three buybacks, 21 buildings, two
 Roshan kills, and two Aegis pickups from the saved sample; exact local-catalog
 hero IDs; unknown and duplicate actor identities; negative and end-tail times;
@@ -690,6 +697,28 @@ with corresponding paths. Excluded fields remain in the source fixture to
 exercise the closed projection. Entity and event tests additionally cover the
 bilingual object schema, exact unit matching, six normalized objective types,
 scalar mapping-gap fields, and partial labels without translation.
+
+Timeline acceptance inventories all thirteen public collections listed in
+`agent/game_detail_data.md`. Deterministic checks verify record-local scalar time
+and labels, preserved slot positions, source correspondence, null versus empty
+semantics and the absence of public parallel time arrays. Live-model acceptance
+must exercise all collection types through actual tools, separately report source
+data availability, read/query coverage and final-answer accuracy, and include
+time-index/sign regressions, duplicate-time events, negative times, unknown values
+and inventory-slot nulls when available in the frozen source. Merely calling
+`game.detail` or passing deterministic tests does not count as correct model use
+of every timeline. Preserve full prompts, frozen inputs, traces, answers and
+field-level audits outside the core contract documents.
+
+Query field-feedback regressions distinguish an absent member across the actual
+page (structured retry error with observed sample fields), heterogeneous
+per-record omissions (successful `missing_fields`), explicit null (successful
+present value), and no matched objects (empty success). Check both execution and
+answer stages, successful corrected retry without source mutation, offset/count
+and byte-trimmed page scope, bounded whole-key UTF-8 hints, and the reported
+building-field mistake. Model acceptance must show whether the returned field
+hint leads to a corrected read/query rather than an unsupported missing-data
+claim; deterministic error delivery alone does not establish that behavior.
 
 Existing saved OpenDota responses for `9040460429`, `9040578015`, and
 `9042720328` were also sampled offline against the local entity Catalog and

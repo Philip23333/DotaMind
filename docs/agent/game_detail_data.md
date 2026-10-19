@@ -156,13 +156,40 @@ not calendar timestamps, and have no timezone conversion.
 | `duration_seconds` | `duration_label` | `2904` → `"48:24"`; `3600` → `"60:00"` |
 | `reported_time_seconds` | `reported_time_label` | `0` → `"00:00"` |
 | `time_dead_seconds` | `time_dead_label` | `28.125` → `"00:28.125"` |
-| Economy `time_seconds[]` | `time_labels[]` | Preserve the verified axis's order and length; `[0, 600]` → `["00:00", "10:00"]` |
+| Economy `minute_timeline[].time_seconds` | `minute_timeline[].time_label` | Bind each verified time and its advantage values in one record; `600` → `"10:00"` |
 
 Each label is a string or `null`; a missing seconds value produces `null`, not
-`00:00`. An unavailable team axis yields `time_labels=null`, even when advantage
-values remain available; an explicit empty axis yields `[]`. Minute-node time is
+`00:00`. An unavailable team axis yields `economy.minute_timeline=null`; unaligned
+advantage arrays are not exposed as a second public route. An explicitly empty,
+verified axis and matching empty metrics yield `minute_timeline=[]`. Minute-node time is
 a required integer, so an existing minute node always has a non-null label.
 Do not introduce a `minute` field or infer timestamps from array positions.
+
+All thirteen public timeline collections use records with their own
+`time_seconds` and `time_label`; none expose parallel time/value arrays:
+
+| Collection | Payload bound to each time |
+|---|---|
+| `players[].minute_timeline` | Earned gold, experience, last hits, denies, kills and known deaths |
+| `economy.minute_timeline` | Radiant gold and experience advantage |
+| `builds.players[].purchase_events` | Item and charges |
+| `builds.players[].inventory_events` | Six inventory slots, three backpack slots and neutral slot |
+| `builds.players[].ability_upgrade_events` | Ability and reported level |
+| `builds.players[].neutral_item_history` | Neutral item and enhancement |
+| `events.hero_deaths` | Victim, killer, gold attributes and time dead |
+| `events.buybacks` | Player slot |
+| `events.building_destructions` | Building, actor and source player slot |
+| `events.roshan_kills` | Explicit Roshan kill fact |
+| `events.aegis_pickups` | Pickup player slot |
+| `events.first_blood.objective_events` | Explicit first-blood objective fact |
+| `events.other_objectives` | Explicit courier, Tormentor or other objective fact |
+
+Time and payload correspondence is constructed and validated below the public
+capability boundary. Item slots remain ordered lists inside one inventory
+record; they are not a parallel time axis. Source provider arrays remain
+internal. `first_blood.reported_time_seconds`/`reported_time_label`, match duration
+and death duration are scalar time pairs, not separate timeline axes. Preserve
+unknown event times as null and source-empty event lists as empty lists.
 
 The original seconds remain unchanged and authoritative for matching, sorting,
 and calculations. Labels are deterministic display values, not new source facts,
@@ -351,24 +378,32 @@ to its public player values; it does not rename an unrelated source field.
 
 | Target field | Type | Source and rule |
 |---|---|---|
-| `radiant_gold_adv` | nullable-number array or `null` | OpenDota gold-advantage samples; invalid individual values remain `null` with a coverage gap. |
-| `radiant_xp_adv` | nullable-number array or `null` | OpenDota experience-advantage samples with the same rule; STRATZ substitution requires its own verified axis. |
-| `time_seconds` | integer array or `null` | Reuse a player's `times` axis only after verifying all player axes agree and both team arrays have matching lengths and index correspondence. |
-| `time_labels` | string array or `null` | Format the verified `time_seconds` array in the same order; unavailable axis stays `null`, explicit empty axis stays `[]`. |
+| `minute_timeline` | record array or `null` | Programmatically bind the verified minute axis to its corresponding source samples. No parallel public time/value arrays remain. |
+| `minute_timeline[].time_seconds` | required integer | Reuse player `times` only after verifying all player axes agree and follow `0,60,...`; validate each metric's length independently before binding. |
+| `minute_timeline[].time_label` | required string | Format the same record's seconds with the shared formatter. |
+| `minute_timeline[].radiant_gold_adv` | number or `null` | Original OpenDota gold-advantage sample, including its sign; invalid samples remain `null` with coverage. |
+| `minute_timeline[].radiant_xp_adv` | number or `null` | Original OpenDota experience-advantage sample with the same rule; STRATZ substitution requires its own verified axis. |
 
 Do not assume every player array shares the same axis or that an advantage array can be aligned merely because lengths match. When correspondence cannot be established, leave the affected axis or series unavailable and report only a material promised-data gap or conflict.
 
-Require strictly increasing integer axes. A mismatched metric becomes unavailable
-without truncating other metrics. OpenDota team arrays retain the existing
-verified `0,60,...` alignment checks; otherwise retain values with
-`time_seconds=null` and coverage. Unknown-time death facts do not invalidate
+Require strictly increasing integer axes. A mismatched metric becomes `null` in
+all minute records without truncating other metrics or fabricating its missing
+tail. An invalid individual sample affects only its own value. OpenDota team
+arrays retain the verified `0,60,...` alignment checks; an unavailable axis or no
+alignable metrics yields `minute_timeline=null` with coverage. Source arrays stay
+internal; do not expose unbound values, infer an axis from array length, silently
+zip unequal arrays, or derive missing samples from final statistics. Unknown-time death facts do not invalidate
 other timed death facts. For STRATZ, validate interval versus point semantics,
 starting boundary, and terminal bucket independently for each series before
 constructing a time axis. The sample has 64/65/66-length arrays; no universal
 shift/truncation rule follows. Its 640 player XP prefix sums match OpenDota,
 which is sample evidence for a candidate conversion, not all-array validation.
 
-The first-version team fields are the two source advantage arrays and their verified time axis listed above. Validate availability and correspondence for each response; additional economy fields require a separate decision.
+Query a minute by its `time_seconds`, for example
+`expression="$.data.economy.minute_timeline[?@.time_seconds == 60]"` with
+`fields=["time_seconds", "time_label", "radiant_gold_adv", "radiant_xp_adv"]`.
+The two advantage metrics preserve their original meanings. Additional economy
+fields require a separate decision.
 
 ### 5. `builds`
 
