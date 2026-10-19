@@ -15,6 +15,7 @@ from app.vnext.providers.stratz.game_detail import StratzGameRecord
 from .data import CoverageGroup, HeroDeath, MissingData, SourcePath, TargetValue
 from .death_coverage import apply_death_coverage
 from .statistics import apply_final_statistics
+from .support import apply_support
 
 
 def _association(player, candidates):
@@ -349,6 +350,7 @@ def project_detail(
     coverage.death_counts.clear()
     apply_death_coverage(data, available_slots, provider="stratz")
     apply_final_statistics(data, primary, available_slots)
+    apply_support(data, primary, supplement, remapping, entities)
     if supplement is not None:
         for old, new in remapping.items():
             if not coverage.death_counts[new].unaccounted_deaths:

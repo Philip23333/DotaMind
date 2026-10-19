@@ -206,11 +206,34 @@ class LevelEvent(_TimedData):
     level: StrictInt | None = Field(default=None, ge=1)
 
 
+SupportAction = Literal["used", "placed", "destroyed", "purchase_record"]
+
+
+class SupportEvent(_TimedData):
+    item: EntityData
+    action: SupportAction
+    source_paths: list[SourcePath]
+
+
+class SupportCount(_Data):
+    item: EntityData
+    action: SupportAction
+    count: StrictInt = Field(ge=0)
+    scope: Literal["source_total", "known_events"]
+    source_paths: list[SourcePath]
+
+
+class PlayerSupport(_Data):
+    events: list[SupportEvent] = Field(default_factory=list)
+    totals: list[SupportCount] = Field(default_factory=list)
+
+
 class PlayerData(_Data):
     identity: PlayerIdentity
     final_stats: FinalStats
     minute_timeline: list[MinuteData] | None = None
     level_events: list[LevelEvent] | None = None
+    support: PlayerSupport | None = None
 
 
 class EconomyMinute(_TimedData):
@@ -389,10 +412,16 @@ class TargetValue(_Data):
     value: Number
 
 
+class HeroDamageFrom(_Data):
+    source_hero: EntityData | None = None
+    value: Number
+
+
 class PlayerInteractions(_Data):
     player_slot: StrictInt | None = None
     kills_by_target: list[TargetValue] | None = None
     damage_by_target: list[TargetValue] | None = None
+    damage_received_by_source: list[HeroDamageFrom] | None = None
     healing_by_target: list[TargetValue] | None = None
 
 

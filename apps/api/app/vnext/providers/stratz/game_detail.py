@@ -44,7 +44,10 @@ query GameDetail($id: Long!) {
       stats {
         itemPurchases { time itemId }
         matchPlayerBuffEvent { time itemId abilityId stackCount }
-        heroDamageReport { dealtTargets { target amount } }
+        itemUsed { itemId count }
+        wards { time type }
+        wardDestruction { time isWard }
+        heroDamageReport { dealtTargets { target amount } receivedTargets { target amount } }
       }
       playbackData {
         goldEvents { time amount reason isValidForStats }
@@ -52,6 +55,7 @@ query GameDetail($id: Long!) {
         buyBackEvents { time }
         abilityLearnEvents { time abilityId level levelObtained isTalent isUltimate }
         playerUpdateLevelEvents { time level }
+        itemUsedEvents { time itemId }
         inventoryEvents {
           time
           item0 { itemId charges } item1 { itemId charges } item2 { itemId charges }
@@ -240,6 +244,10 @@ class StratzGameDetailAdapter:
                         "stackCount": int,
                     },
                     "playerUpdateLevelEvents": {"time": int, "level": int},
+                    "itemUsedEvents": {"time": int, "itemId": int},
+                    "itemUsed": {"itemId": int, "count": int},
+                    "wards": {"time": int, "type": int},
+                    "wardDestruction": {"time": int, "isWard": bool},
                     "goldEvents": {
                         "time": int,
                         "amount": int,
@@ -284,6 +292,12 @@ class StratzGameDetailAdapter:
                     _validate_rows(
                         report,
                         "dealtTargets",
+                        f"{path}.heroDamageReport",
+                        {"target": int, "amount": int},
+                    )
+                    _validate_rows(
+                        report,
+                        "receivedTargets",
                         f"{path}.heroDamageReport",
                         {"target": int, "amount": int},
                     )

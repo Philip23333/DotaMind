@@ -19,6 +19,7 @@ from app.vnext.capabilities.game.data import (
     FinalStats,
     FirstBloodData,
     GameDetailData,
+    HeroDamageFrom,
     HeroDeath,
     InteractionsData,
     InventoryEvent,
@@ -393,7 +394,37 @@ def project_stratz_detail(
             if target.get("amount") is not None:
                 amounts.append(TargetValue(target_hero=entity, value=target["amount"]))
         interactions.append(
-            PlayerInteractions(player_slot=p.get("playerSlot"), damage_by_target=amounts)
+            PlayerInteractions(
+                player_slot=p.get("playerSlot"),
+                damage_by_target=amounts,
+                damage_received_by_source=[
+                    HeroDamageFrom(
+                        source_hero=entities.by_id(
+                            t["target"],
+                            "hero",
+                            f"interactions.players[{i}].damage_received_by_source[{j}].source_hero",
+                            f"{path}.stats.heroDamageReport.receivedTargets[{j}].target",
+                            coverage,
+                        )
+                        if t.get("target") in by_hero
+                        else None,
+                        value=t["amount"],
+                    )
+                    for j, t in enumerate(report.get("receivedTargets") or [])
+                    if t.get("amount") is not None
+                ]
+                if isinstance(report.get("receivedTargets"), list)
+                else None,
+            )
+        )
+        _group(
+            coverage,
+            f"interactions.players[{i}].damage_received_by_source",
+            f"{path}.stats.heroDamageReport.receivedTargets",
+            interactions[-1].damage_received_by_source,
+            partial=any(
+                t.source_hero is None for t in interactions[-1].damage_received_by_source or []
+            ),
         )
         _group(
             coverage,
